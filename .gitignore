@@ -1,0 +1,9 @@
+bin/
+obj/
+.dotnet/
+.vs/
+node_modules/
+dist/
+.angular/
+*.user
+*.log

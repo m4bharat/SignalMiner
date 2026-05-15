@@ -1,0 +1,126 @@
+<main class="shell">
+  <section class="topbar">
+    <div>
+      <h1>SignalMiner</h1>
+      <p>{{ message() }}</p>
+    </div>
+    <div class="discovery">
+      <input [ngModel]="discoveryQuery()" (ngModelChange)="discoveryQuery.set($event)" placeholder="GitHub discovery query">
+      <button type="button" (click)="discover()" [disabled]="loading()">Discover</button>
+    </div>
+  </section>
+
+  <section class="workspace">
+    <aside class="filters">
+      <label>
+        Search
+        <input [ngModel]="query()" (ngModelChange)="query.set($event)" placeholder="Name, company, email">
+      </label>
+      <label>
+        Minimum fit
+        <input type="number" [ngModel]="minFitScore()" (ngModelChange)="minFitScore.set($event)" min="0" max="100">
+      </label>
+      <label>
+        Contact status
+        <select [ngModel]="contactStatus()" (ngModelChange)="contactStatus.set($event)">
+          <option value="">Any</option>
+          <option value="NotContacted">Not contacted</option>
+          <option value="ReadyForManualOutreach">Ready for manual outreach</option>
+          <option value="Contacted">Contacted</option>
+          <option value="Replied">Replied</option>
+          <option value="NotInterested">Not interested</option>
+          <option value="DoNotContact">Do not contact</option>
+        </select>
+      </label>
+      <button type="button" (click)="search()" [disabled]="loading()">Apply filters</button>
+      <div class="policy">
+        <strong>Compliance</strong>
+        <span>No LinkedIn scraping</span>
+        <span>No automated messaging</span>
+        <span>No sessions or CAPTCHA bypass</span>
+      </div>
+    </aside>
+
+    <section class="lead-table">
+      <header>
+        <h2>Leads</h2>
+        <span>{{ total() }} matches</span>
+      </header>
+      <table>
+        <thead>
+          <tr>
+            <th>Lead</th>
+            <th>Fit</th>
+            <th>Contact</th>
+            <th>Source</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (lead of leads(); track lead.id) {
+            <tr (click)="selectLead(lead)" [class.active]="selectedLead()?.id === lead.id">
+              <td>
+                <strong>{{ lead.displayName }}</strong>
+                <span>{{ lead.company?.name || lead.roleTitle || 'Independent' }}</span>
+              </td>
+              <td><meter min="0" max="100" [value]="lead.fitScore"></meter>{{ lead.fitScore }}</td>
+              <td>{{ lead.contactStatus }}</td>
+              <td><a [href]="lead.gitHubUrl" target="_blank">GitHub</a></td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="4" class="empty">No leads yet. Run discovery or adjust filters.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </section>
+
+    <aside class="detail">
+      @if (selectedLead(); as lead) {
+        <header>
+          <h2>{{ lead.displayName }}</h2>
+          <button type="button" (click)="enrich(lead)" [disabled]="loading()">Enrich</button>
+        </header>
+        <dl>
+          <dt>Fit score</dt>
+          <dd>{{ lead.fitScore }} - {{ lead.scoreRationale }}</dd>
+          <dt>Email</dt>
+          <dd>{{ lead.publicEmail || 'No public email found' }}</dd>
+          <dt>Company</dt>
+          <dd>{{ lead.company?.name || 'No company found' }}</dd>
+          <dt>Website</dt>
+          <dd><a [href]="lead.websiteUrl" target="_blank">{{ lead.websiteUrl || 'None' }}</a></dd>
+          <dt>X / Twitter</dt>
+          <dd><a [href]="lead.xUrl" target="_blank">{{ lead.xUrl || 'None' }}</a></dd>
+          <dt>LinkedIn URL</dt>
+          <dd><a [href]="lead.linkedInUrl" target="_blank">{{ lead.linkedInUrl || 'None' }}</a></dd>
+          <dt>Notes</dt>
+          <dd>{{ lead.notes || 'No notes yet' }}</dd>
+          <dt>Public sources</dt>
+          <dd>
+            @for (profile of lead.sourceProfiles || []; track profile.url) {
+              <a [href]="profile.url" target="_blank">{{ profile.kind }}</a>
+            } @empty {
+              None
+            }
+          </dd>
+        </dl>
+        <label>
+          Outreach note
+          <textarea [ngModel]="outreachNote()" (ngModelChange)="outreachNote.set($event)" rows="4"></textarea>
+        </label>
+        <div class="status-actions">
+          <button type="button" (click)="updateStatus('ReadyForManualOutreach')">Ready</button>
+          <button type="button" (click)="updateStatus('Contacted')">Contacted</button>
+          <button type="button" (click)="updateStatus('DoNotContact')">DNC</button>
+        </div>
+        <h3>Quick templates</h3>
+        @for (template of templates(); track template) {
+          <p class="template">{{ template }}</p>
+        }
+      } @else {
+        <p class="empty">Select a lead to review fit, notes, and templates.</p>
+      }
+    </aside>
+  </section>
+</main>

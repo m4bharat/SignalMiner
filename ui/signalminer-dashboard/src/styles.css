@@ -1,0 +1,242 @@
+:root {
+  color-scheme: light;
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  background: #f7f8f3;
+  color: #1e2a2f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  border-radius: 6px;
+  background: #174d4d;
+  color: white;
+  cursor: pointer;
+  padding: 0.68rem 0.9rem;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid #c8d1c8;
+  border-radius: 6px;
+  background: white;
+  color: #1e2a2f;
+  padding: 0.65rem 0.75rem;
+}
+
+a {
+  color: #855a00;
+}
+
+.shell {
+  min-height: 100vh;
+}
+
+.topbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #dfe5dc;
+  background: #ffffff;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 1.55rem;
+}
+
+.topbar p {
+  color: #5c686b;
+  margin-top: 0.2rem;
+}
+
+.discovery {
+  display: grid;
+  grid-template-columns: minmax(16rem, 24rem) auto;
+  gap: 0.65rem;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 17rem minmax(28rem, 1fr) 25rem;
+  min-height: calc(100vh - 83px);
+}
+
+.filters,
+.detail {
+  background: #fbfcf8;
+  padding: 1rem;
+}
+
+.filters {
+  border-right: 1px solid #dfe5dc;
+}
+
+.detail {
+  border-left: 1px solid #dfe5dc;
+}
+
+label {
+  display: grid;
+  gap: 0.35rem;
+  color: #445054;
+  font-size: 0.86rem;
+  margin-bottom: 0.8rem;
+}
+
+.policy {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 1rem;
+  color: #445054;
+  font-size: 0.86rem;
+}
+
+.lead-table {
+  overflow: auto;
+  background: #ffffff;
+}
+
+.lead-table header,
+.detail header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border-bottom: 1px solid #e5e9e2;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  border-bottom: 1px solid #edf0eb;
+  padding: 0.85rem 1rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  color: #59666a;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+tr {
+  cursor: pointer;
+}
+
+tr.active,
+tbody tr:hover {
+  background: #edf6f2;
+}
+
+td span {
+  display: block;
+  color: #667175;
+  margin-top: 0.2rem;
+}
+
+meter {
+  width: 5.5rem;
+  margin-right: 0.5rem;
+}
+
+dl {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem 0;
+  margin: 0;
+}
+
+dt {
+  color: #667175;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+dd {
+  margin: 0 0 0.7rem;
+}
+
+.status-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.template {
+  border: 1px solid #dfe5dc;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #2e3a3f;
+  padding: 0.75rem;
+  margin-top: 0.6rem;
+  line-height: 1.45;
+}
+
+.empty {
+  color: #667175;
+  padding: 1rem;
+}
+
+@media (max-width: 1100px) {
+  .workspace {
+    grid-template-columns: 15rem 1fr;
+  }
+
+  .detail {
+    grid-column: 1 / -1;
+    border-left: 0;
+    border-top: 1px solid #dfe5dc;
+  }
+}
+
+@media (max-width: 760px) {
+  .topbar,
+  .discovery,
+  .workspace {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .filters,
+  .detail {
+    border: 0;
+    border-bottom: 1px solid #dfe5dc;
+  }
+}

@@ -1,0 +1,19 @@
+@SignalMiner.Api_HostAddress = http://localhost:5000
+
+GET {{SignalMiner.Api_HostAddress}}/api/compliance
+Accept: application/json
+
+###
+
+POST {{SignalMiner.Api_HostAddress}}/api/leads/discover
+Content-Type: application/json
+
+{
+  "query": "founder saas ai",
+  "limit": 10
+}
+
+###
+
+GET {{SignalMiner.Api_HostAddress}}/api/leads/search?minFitScore=50&page=1&pageSize=25
+Accept: application/json
