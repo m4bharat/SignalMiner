@@ -7,6 +7,11 @@ public sealed class LeadScoringService : ILeadScoringService
     private static readonly string[] FounderKeywords = ["founder", "co-founder", "ceo", "cto", "builder", "indie hacker"];
     private static readonly string[] SaaSKeywords = ["saas", "b2b", "subscription", "crm", "workflow", "automation"];
     private static readonly string[] AiKeywords = ["ai", "llm", "agent", "copilot", "machine learning", "automation"];
+    private static readonly string[] XZextriKeywords =
+    [
+        "founder", "co-founder", "recruiter", "hiring", "sales", "gtm", "creator",
+        "content", "linkedin", "personal brand", "saas", "ai", "startup", "consultant"
+    ];
 
     public LeadScore Score(Lead lead)
     {
@@ -16,7 +21,8 @@ public sealed class LeadScoringService : ILeadScoringService
             lead.RoleTitle,
             lead.Notes,
             lead.Company?.Summary,
-            string.Join(' ', lead.Company?.Keywords ?? [])
+            string.Join(' ', lead.Company?.Keywords ?? []),
+            string.Join(' ', lead.SourceProfiles.Select(profile => profile.Bio))
         }.Where(x => !string.IsNullOrWhiteSpace(x))).ToLowerInvariant();
 
         var score = 0;
@@ -35,6 +41,13 @@ public sealed class LeadScoringService : ILeadScoringService
         {
             score += 10;
             reasons.Add("public X URL present");
+        }
+
+        var hasXProfile = lead.SourceProfiles.Any(profile => profile.Kind == SourceKind.X);
+        if (hasXProfile && XZextriKeywords.Any(text.Contains))
+        {
+            score += 25;
+            reasons.Add("X profile shows founder/creator/GTM signals relevant to Zextri");
         }
 
         var activity = lead.SourceProfiles.Sum(p => p.PublicActivityCount ?? 0);

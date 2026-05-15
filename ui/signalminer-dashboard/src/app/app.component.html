@@ -5,7 +5,11 @@
       <p>{{ message() }}</p>
     </div>
     <div class="discovery">
-      <input [ngModel]="discoveryQuery()" (ngModelChange)="discoveryQuery.set($event)" placeholder="GitHub discovery query">
+      <select [ngModel]="discoverySource()" (ngModelChange)="discoverySource.set($event)">
+        <option value="GitHub">GitHub</option>
+        <option value="X">X</option>
+      </select>
+      <input [ngModel]="discoveryQuery()" (ngModelChange)="discoveryQuery.set($event)" placeholder="Discovery query">
       <button type="button" (click)="discover()" [disabled]="loading()">Discover</button>
     </div>
   </section>
@@ -64,7 +68,13 @@
               </td>
               <td><meter min="0" max="100" [value]="lead.fitScore"></meter>{{ lead.fitScore }}</td>
               <td>{{ lead.contactStatus }}</td>
-              <td><a [href]="lead.gitHubUrl" target="_blank">GitHub</a></td>
+              <td>
+                @if (primarySource(lead).url) {
+                  <a [href]="primarySource(lead).url" target="_blank">{{ primarySource(lead).label }}</a>
+                } @else {
+                  {{ primarySource(lead).label }}
+                }
+              </td>
             </tr>
           } @empty {
             <tr>

@@ -5,12 +5,19 @@ namespace SignalMiner.Application;
 public sealed class LeadWorkflow(
     ILeadRepository repository,
     IGitHubDiscoveryService gitHubDiscovery,
+    IXDiscoveryService xDiscovery,
     IWebsiteExtractionService websiteExtraction,
     ILeadScoringService scoring) : ILeadWorkflow
 {
     public async Task<IReadOnlyList<Lead>> DiscoverAsync(DiscoverLeadsRequest request, CancellationToken cancellationToken)
     {
-        var leads = await gitHubDiscovery.DiscoverAsync(request, cancellationToken);
+        var leads = request.Source switch
+        {
+            DiscoverySource.GitHub => await gitHubDiscovery.DiscoverAsync(request, cancellationToken),
+            DiscoverySource.X => await xDiscovery.DiscoverAsync(request, cancellationToken),
+            _ => throw new ArgumentOutOfRangeException(nameof(request), request.Source, "Unsupported discovery source.")
+        };
+
         foreach (var lead in leads)
         {
             var result = scoring.Score(lead);

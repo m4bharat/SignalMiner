@@ -18,6 +18,7 @@ public sealed class SignalMinerDbContext(DbContextOptions<SignalMinerDbContext> 
             entity.HasIndex(x => x.FitScore);
             entity.HasIndex(x => x.ContactStatus);
             entity.Property(x => x.ScoreRationale).HasMaxLength(1000);
+            // TODO: add a filtered unique XUrl migration if EF migrations are introduced.
         });
 
         modelBuilder.Entity<Company>()

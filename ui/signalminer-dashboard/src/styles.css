@@ -81,7 +81,7 @@ h1 {
 
 .discovery {
   display: grid;
-  grid-template-columns: minmax(16rem, 24rem) auto;
+  grid-template-columns: 8rem minmax(16rem, 24rem) auto;
   gap: 0.65rem;
 }
 

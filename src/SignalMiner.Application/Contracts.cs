@@ -2,7 +2,13 @@ using SignalMiner.Domain;
 
 namespace SignalMiner.Application;
 
-public sealed record DiscoverLeadsRequest(string Query, int Limit = 25);
+public enum DiscoverySource
+{
+    GitHub,
+    X
+}
+
+public sealed record DiscoverLeadsRequest(string Query, int Limit = 25, DiscoverySource Source = DiscoverySource.GitHub);
 
 public sealed record LeadSearchRequest(
     string? Query,
@@ -11,7 +17,7 @@ public sealed record LeadSearchRequest(
     LeadStatus? Status,
     string[]? Keywords,
     int Page = 1,
-    int PageSize = 25);
+    int PageSize = 5);
 
 public sealed record UpdateOutreachStatusRequest(ContactStatus Status, string? Note);
 
@@ -35,6 +41,11 @@ public interface ILeadRepository
 }
 
 public interface IGitHubDiscoveryService
+{
+    Task<IReadOnlyList<Lead>> DiscoverAsync(DiscoverLeadsRequest request, CancellationToken cancellationToken);
+}
+
+public interface IXDiscoveryService
 {
     Task<IReadOnlyList<Lead>> DiscoverAsync(DiscoverLeadsRequest request, CancellationToken cancellationToken);
 }

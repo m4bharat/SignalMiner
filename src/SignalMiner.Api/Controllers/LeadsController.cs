@@ -18,6 +18,21 @@ public sealed class LeadsController(
         DiscoverLeadsRequest request,
         CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(request.Query))
+        {
+            return BadRequest(new { message = "query is required." });
+        }
+
+        if (request.Limit is < 1 or > 50)
+        {
+            return BadRequest(new { message = "limit must be between 1 and 50." });
+        }
+
+        if (!Enum.IsDefined(request.Source))
+        {
+            return BadRequest(new { message = "source must be a valid discovery source." });
+        }
+
         try
         {
             var discovered = await workflow.DiscoverAsync(request, cancellationToken);

@@ -14,10 +14,12 @@ public sealed class ComplianceController : ControllerBase
         CompliancePolicy.NoAutomatedMessaging,
         Rules = new[]
         {
-            "No LinkedIn scraping; only user-entered public LinkedIn URLs are stored.",
+            "GitHub discovery uses public GitHub API/profile signals.",
+            "X discovery uses only public profile pages and public search-result pages.",
+            "No LinkedIn scraping; only LinkedIn URLs visible on allowed public websites/profiles are stored.",
             "No automated messaging.",
-            "No credential or browser-session handling.",
-            "No CAPTCHA bypass.",
+            "No credential, cookie, or browser-session handling.",
+            "No CAPTCHA bypass, proxy, or anti-detection logic.",
             "Every lead starts in manual review."
         }
     });

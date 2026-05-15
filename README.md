@@ -5,9 +5,10 @@ SignalMiner is a compliant lead discovery and enrichment platform for finding po
 ## Guardrails
 
 - No LinkedIn scraping. SignalMiner can store a public LinkedIn URL that a human enters or that appears on an allowed public website, but it does not crawl LinkedIn.
+- X discovery only uses public profile pages and public search-result pages.
 - No automated messaging. The CRM stores notes, statuses, and reusable templates for manual outreach only.
-- No credential or browser-session handling.
-- No CAPTCHA bypass or evasion.
+- No credential, cookie, or browser-session handling.
+- No CAPTCHA bypass, proxy, anti-detection logic, or rate-limit evasion.
 - Manual-review-first workflow. Newly discovered leads are marked `NeedsManualReview`.
 
 ## Projects
@@ -21,7 +22,7 @@ SignalMiner is a compliant lead discovery and enrichment platform for finding po
 
 ## API Endpoints
 
-- `POST /api/leads/discover`: discover GitHub leads immediately.
+- `POST /api/leads/discover`: discover GitHub or X leads immediately. Omit `source` to use GitHub.
 - `POST /api/leads/discover/jobs`: enqueue discovery through Hangfire.
 - `POST /api/leads/{id}/enrich`: enrich one lead from public website data.
 - `PATCH /api/leads/{id}/outreach-status`: update manual outreach status.
@@ -79,3 +80,15 @@ The dashboard expects the API at `http://localhost:5000`. Docker is not required
 ## Scoring Signals
 
 SignalMiner scores leads from public data using founder/operator keywords, SaaS keywords, AI keywords, public LinkedIn/X URL presence, GitHub posting/repository activity, and public website quality.
+
+## X Discovery Example
+
+```json
+{
+  "source": "X",
+  "query": "founder AI",
+  "limit": 25
+}
+```
+
+X discovery is limited to public HTML and public search-result pages. If X or the search-result page blocks anonymous HTML access, SignalMiner fails gracefully and does not attempt login, session reuse, CAPTCHA bypass, proxies, or anti-detection behavior.

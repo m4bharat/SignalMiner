@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 
 type ContactStatus = 'NotContacted' | 'ReadyForManualOutreach' | 'Contacted' | 'Replied' | 'NotInterested' | 'DoNotContact';
 type LeadStatus = 'New' | 'Enriched' | 'NeedsManualReview' | 'Qualified' | 'Disqualified' | 'Archived';
+type DiscoverySource = 'GitHub' | 'X';
 
 interface Lead {
   id: string;
@@ -51,6 +52,7 @@ export class AppComponent {
   protected readonly minFitScore = signal<number | null>(50);
   protected readonly contactStatus = signal<ContactStatus | ''>('');
   protected readonly discoveryQuery = signal('founder saas ai');
+  protected readonly discoverySource = signal<DiscoverySource>('GitHub');
   protected readonly loading = signal(false);
   protected readonly message = signal('Manual-review-first lead discovery workspace');
   protected readonly outreachNote = signal('');
@@ -97,17 +99,25 @@ export class AppComponent {
     this.loading.set(true);
     this.http.post<Lead[]>(`${this.apiBase}/leads/discover`, {
       query: this.discoveryQuery(),
-      limit: 25
+      limit: 25,
+      source: this.discoverySource()
     }).subscribe({
       next: leads => {
-        this.message.set(`Discovered ${leads.length} leads for manual review.`);
+        this.message.set(`Discovered ${leads.length} ${this.discoverySource()} leads for manual review.`);
         this.search();
       },
       error: (error: HttpErrorResponse) => {
-        this.message.set(error.error?.message || 'Discovery failed. Check API, PostgreSQL, and GitHub rate limits.');
+        this.message.set(error.error?.message || 'Discovery failed. Check API, PostgreSQL, and source rate limits.');
         this.loading.set(false);
       }
     });
+  }
+
+  protected primarySource(lead: Lead): { label: string; url?: string } {
+    if (lead.gitHubUrl) return { label: 'GitHub', url: lead.gitHubUrl };
+    if (lead.xUrl) return { label: 'X', url: lead.xUrl };
+    if (lead.websiteUrl) return { label: 'Website', url: lead.websiteUrl };
+    return { label: 'None' };
   }
 
   protected enrich(lead: Lead): void {

@@ -21,6 +21,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ILeadScoringService, LeadScoringService>();
         services.AddScoped<ILeadWorkflow, LeadWorkflow>();
         services.AddScoped<IWebsiteExtractionService, WebsiteExtractionService>();
+        services.AddHttpClient<IXDiscoveryService, XDiscoveryService>(client =>
+        {
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("SignalMiner/0.1");
+            client.DefaultRequestHeaders.Accept.ParseAdd("text/html,application/xhtml+xml");
+        });
+
         services.AddHttpClient<IGitHubDiscoveryService, GitHubDiscoveryService>((provider, client) =>
         {
             client.BaseAddress = new Uri("https://api.github.com/");
