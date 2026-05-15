@@ -37,6 +37,18 @@ public sealed class LeadScoringService : ILeadScoringService
             reasons.Add("public LinkedIn URL present");
         }
 
+        if (!string.IsNullOrWhiteSpace(lead.WebsiteUrl))
+        {
+            score += 10;
+            reasons.Add("public website present");
+        }
+
+        if (!string.IsNullOrWhiteSpace(lead.PublicEmail))
+        {
+            score += 15;
+            reasons.Add("public email present");
+        }
+
         if (!string.IsNullOrWhiteSpace(lead.XUrl))
         {
             score += 10;

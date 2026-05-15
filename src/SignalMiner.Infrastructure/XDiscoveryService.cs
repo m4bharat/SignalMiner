@@ -7,8 +7,16 @@ using SignalMiner.Domain;
 
 namespace SignalMiner.Infrastructure;
 
-public sealed partial class XDiscoveryService(HttpClient httpClient) : IXDiscoveryService
+public sealed partial class XDiscoveryService(HttpClient httpClient, IWebsiteExtractionService websiteExtraction) : IXDiscoveryService
 {
+    private static readonly string[] DiscoveryHosts = ["x.com", "twitter.com"];
+    private static readonly string[] PersonaSignals =
+    [
+        "founder", "co-founder", "builder", "building in public", "creator",
+        "content", "personal brand", "startup", "saas", "ai", "llm",
+        "agent", "gtm", "sales", "recruiter", "hiring", "consultant"
+    ];
+
     private static readonly string[] ReservedPaths =
     [
         "home", "search", "explore", "i", "intent", "share", "settings",
@@ -37,7 +45,9 @@ public sealed partial class XDiscoveryService(HttpClient httpClient) : IXDiscove
                 continue;
             }
 
-            leads.Add(profile.ToLead());
+            var lead = profile.ToLead();
+            await EnrichFromLinkedWebsiteAsync(lead, cancellationToken);
+            leads.Add(lead);
             if (leads.Count >= limit)
             {
                 break;
@@ -177,7 +187,12 @@ public sealed partial class XDiscoveryService(HttpClient httpClient) : IXDiscove
             .OfType<string>()
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var websiteUrl = links.FirstOrDefault(IsAllowedExternalWebsite);
+        var websiteUrl = links
+            .Concat(ExtractExternalUrlsFromHtml(html))
+            .Select(NormalizeExternalUrl)
+            .OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(IsAllowedExternalWebsite);
         var linkedInUrl = links.FirstOrDefault(IsLinkedInUrl);
         var visibleText = string.Join(' ', description, document.Body?.TextContent);
         var publicEmail = ExtractEmail(visibleText);
@@ -194,29 +209,113 @@ public sealed partial class XDiscoveryService(HttpClient httpClient) : IXDiscove
             notes);
     }
 
-    private static IReadOnlyList<Uri> BuildSearchUrls(string query)
+    private async Task EnrichFromLinkedWebsiteAsync(Lead lead, CancellationToken cancellationToken)
     {
-        var terms = string.IsNullOrWhiteSpace(query) ? "founder AI" : query.Trim();
-        return
-        [
-            BuildDuckDuckGoHtmlSearchUrl("x.com", terms),
-            BuildDuckDuckGoHtmlSearchUrl("twitter.com", terms),
-            BuildDuckDuckGoLiteSearchUrl("x.com", terms),
-            BuildDuckDuckGoLiteSearchUrl("twitter.com", terms)
-        ];
+        if (string.IsNullOrWhiteSpace(lead.WebsiteUrl))
+        {
+            lead.Notes = AppendNote(lead.Notes, "No public email found. Manual review required.");
+            lead.Status = LeadStatus.NeedsManualReview;
+            return;
+        }
+
+        try
+        {
+            var snapshot = await websiteExtraction.ExtractAsync(lead, cancellationToken);
+            if (snapshot is not null)
+            {
+                lead.WebsiteSnapshots.Add(snapshot);
+                lead.PublicEmail ??= snapshot.PublicEmails.FirstOrDefault();
+                lead.Company ??= BuildCompanyFromSnapshot(lead.WebsiteUrl, snapshot);
+            }
+
+            lead.Notes = string.IsNullOrWhiteSpace(lead.PublicEmail)
+                ? AppendNote(lead.Notes, "No public email found. Manual review required.")
+                : AppendNote(lead.Notes, "Public contact found from website linked on X profile.");
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            lead.Notes = AppendNote(lead.Notes, "No public email found. Manual review required.");
+        }
+        finally
+        {
+            lead.Status = LeadStatus.NeedsManualReview;
+        }
     }
 
-    private static Uri BuildDuckDuckGoHtmlSearchUrl(string host, string terms)
+    private static IReadOnlyList<Uri> BuildSearchUrls(string query)
     {
-        var search = $"site:{host} (\"founder\" OR \"recruiter\" OR \"sales\" OR \"GTM\" OR \"creator\") {terms}";
+        var terms = string.IsNullOrWhiteSpace(query) ? "AI builders" : query.Trim();
+        var searchPhrases = BuildPersonaSearchPhrases(terms).Take(5).ToArray();
+        return searchPhrases
+            .SelectMany(searchPhrase => DiscoveryHosts.SelectMany(host => new[]
+            {
+                BuildDuckDuckGoHtmlSearchUrl(host, searchPhrase),
+                BuildDuckDuckGoLiteSearchUrl(host, searchPhrase)
+            }))
+            .ToArray();
+    }
+
+    private static string[] BuildPersonaSearchPhrases(string query)
+    {
+        var normalized = query.Trim();
+        var lower = normalized.ToLowerInvariant();
+        var phrases = new List<string> { normalized };
+
+        if (lower.Contains("ai") || lower.Contains("builder"))
+        {
+            phrases.AddRange([
+                "\"AI builder\" OR \"building AI\" OR \"LLM\" OR \"AI agent\"",
+                "\"founder\" \"AI\" OR \"co-founder\" \"AI\" OR \"building in public\" \"AI\""
+            ]);
+        }
+
+        if (lower.Contains("startup") || lower.Contains("founder"))
+        {
+            phrases.AddRange([
+                "\"startup founder\" OR \"founder\" \"startup\" OR \"co-founder\" \"startup\"",
+                "\"SaaS founder\" OR \"bootstrapped\" OR \"indie hacker\""
+            ]);
+        }
+
+        if (lower.Contains("creator") || lower.Contains("content"))
+        {
+            phrases.AddRange([
+                "\"creator\" OR \"content\" OR \"newsletter\" OR \"audience\"",
+                "\"personal brand\" OR \"linkedin\" OR \"building in public\""
+            ]);
+        }
+
+        if (lower.Contains("highly online") || lower.Contains("online professional") || lower.Contains("professionals"))
+        {
+            phrases.AddRange([
+                "\"building in public\" OR \"personal brand\" OR \"newsletter\"",
+                "\"creator\" \"startup\" OR \"operator\" \"SaaS\" OR \"consultant\""
+            ]);
+        }
+
+        var fallbackSignals = string.Join(" OR ", PersonaSignals.Select(signal => $"\"{signal}\""));
+        phrases.Add($"({fallbackSignals}) {normalized}");
+
+        return phrases
+            .Where(phrase => !string.IsNullOrWhiteSpace(phrase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static Uri BuildDuckDuckGoHtmlSearchUrl(string host, string searchPhrase)
+    {
+        var search = BuildSearchExpression(host, searchPhrase);
         return new Uri($"https://html.duckduckgo.com/html/?q={Uri.EscapeDataString(search)}");
     }
 
-    private static Uri BuildDuckDuckGoLiteSearchUrl(string host, string terms)
+    private static Uri BuildDuckDuckGoLiteSearchUrl(string host, string searchPhrase)
     {
-        var search = $"site:{host} (\"founder\" OR \"recruiter\" OR \"sales\" OR \"GTM\" OR \"creator\") {terms}";
+        var search = BuildSearchExpression(host, searchPhrase);
         return new Uri($"https://lite.duckduckgo.com/lite/?q={Uri.EscapeDataString(search)}");
     }
+
+    private static string BuildSearchExpression(string host, string searchPhrase) =>
+        $"site:{host} ({searchPhrase}) -inurl:/status/ -inurl:/search -inurl:/hashtag";
 
     private static IEnumerable<string> ExtractCandidateProfileUrls(AngleSharp.Dom.IDocument document, string html)
     {
@@ -297,6 +396,7 @@ public sealed partial class XDiscoveryService(HttpClient httpClient) : IXDiscove
         }
 
         return !IsXHost(uri.Host) &&
+            !uri.Host.Equals("t.co", StringComparison.OrdinalIgnoreCase) &&
             !uri.Host.Contains("linkedin.com", StringComparison.OrdinalIgnoreCase) &&
             !CompliancePolicy.IsBlockedScrapeTarget(uri);
     }
@@ -313,6 +413,60 @@ public sealed partial class XDiscoveryService(HttpClient httpClient) : IXDiscove
 
     private static bool IsBlockedOrLimited(HttpStatusCode statusCode) =>
         statusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests;
+
+    private static IEnumerable<string> ExtractExternalUrlsFromHtml(string html)
+    {
+        var decodedHtml = WebUtility.HtmlDecode(Uri.UnescapeDataString(html));
+        return ExternalUrlRegex().Matches(decodedHtml).Select(match => match.Value);
+    }
+
+    private static string? NormalizeExternalUrl(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var trimmed = WebUtility.HtmlDecode(value.Trim()).TrimEnd('.', ',', ')', ']', '"', '\'');
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
+        {
+            return null;
+        }
+
+        if (uri.Scheme is not ("http" or "https"))
+        {
+            return null;
+        }
+
+        return uri.ToString();
+    }
+
+    private static Company? BuildCompanyFromSnapshot(string? websiteUrl, WebsiteSnapshot snapshot)
+    {
+        if (!Uri.TryCreate(websiteUrl, UriKind.Absolute, out var uri))
+        {
+            return null;
+        }
+
+        return new Company
+        {
+            Name = uri.Host,
+            Domain = uri.Host,
+            Summary = snapshot.Description,
+            Keywords = ExtractCompanyKeywords(string.Join(' ', snapshot.Title, snapshot.Description))
+        };
+    }
+
+    private static string[] ExtractCompanyKeywords(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return [];
+        }
+
+        var keywords = new[] { "founder", "creator", "saas", "ai", "startup", "gtm", "sales", "hiring", "consultant" };
+        return keywords.Where(keyword => text.Contains(keyword, StringComparison.OrdinalIgnoreCase)).ToArray();
+    }
 
     private static bool LooksBlocked(string html) =>
         html.Contains("captcha", StringComparison.OrdinalIgnoreCase) ||
@@ -357,6 +511,18 @@ public sealed partial class XDiscoveryService(HttpClient httpClient) : IXDiscove
         return string.Join(Environment.NewLine, parts);
     }
 
+    private static string AppendNote(string? notes, string note)
+    {
+        if (string.IsNullOrWhiteSpace(notes))
+        {
+            return note;
+        }
+
+        return notes.Contains(note, StringComparison.OrdinalIgnoreCase)
+            ? notes
+            : string.Join(Environment.NewLine, notes, note);
+    }
+
     private sealed record XProfile(
         string DisplayName,
         string XUrl,
@@ -391,6 +557,17 @@ public sealed partial class XDiscoveryService(HttpClient httpClient) : IXDiscove
                 });
             }
 
+            if (!string.IsNullOrWhiteSpace(WebsiteUrl))
+            {
+                sourceProfiles.Add(new SourceProfile
+                {
+                    Kind = SourceKind.Website,
+                    Url = WebsiteUrl,
+                    PublicHandle = TryGetDomain(WebsiteUrl) ?? WebsiteUrl,
+                    Bio = "Public website/link-in-bio URL visible on X profile."
+                });
+            }
+
             return new Lead
             {
                 DisplayName = DisplayName,
@@ -405,6 +582,16 @@ public sealed partial class XDiscoveryService(HttpClient httpClient) : IXDiscove
         }
     }
 
+    private static string? TryGetDomain(string? url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            return null;
+        }
+
+        return uri.Host;
+    }
+
     [GeneratedRegex(@"^[A-Za-z0-9_]{1,15}$")]
     private static partial Regex HandleRegex();
 
@@ -413,6 +600,9 @@ public sealed partial class XDiscoveryService(HttpClient httpClient) : IXDiscove
 
     [GeneratedRegex(@"https?://(?:www\.)?(?:x|twitter)\.com/[A-Za-z0-9_]{1,15}(?:/[^\s""'<>]*)?", RegexOptions.IgnoreCase)]
     private static partial Regex XProfileUrlRegex();
+
+    [GeneratedRegex(@"https?://[^\s""'<>]+", RegexOptions.IgnoreCase)]
+    private static partial Regex ExternalUrlRegex();
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex WhitespaceRegex();
