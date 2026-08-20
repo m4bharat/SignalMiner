@@ -8,6 +8,7 @@ type DiscoverySource = 'GitHub' | 'X';
 type SourceKind = 'GitHub' | 'Website' | 'X' | 'LinkedInProfileUrlOnly' | 'Manual';
 type SourceFilter = '' | 'Imported' | SourceKind;
 type DetailTab = 'overview' | 'outreach' | 'email';
+type ToastKind = 'success' | 'error' | 'info';
 
 const ZEXTRI_LOGO_URL = 'https://zextri.com/icons/zextri-192.png';
 const ZEXTRI_EMAIL_SIGNATURE_TEXT = [
@@ -78,6 +79,12 @@ interface LeadImportPreviewRow {
   duplicateReason?: string;
 }
 
+interface ToastMessage {
+  kind: ToastKind;
+  title: string;
+  body: string;
+}
+
 @Component({
   selector: 'sm-root',
   standalone: true,
@@ -87,6 +94,7 @@ interface LeadImportPreviewRow {
 export class AppComponent {
   private readonly http = inject(HttpClient);
   private readonly apiBase = 'http://localhost:5126/api';
+  private toastTimer: number | undefined;
 
   protected readonly leads = signal<Lead[]>([]);
   protected readonly selectedLead = signal<Lead | null>(null);
@@ -115,6 +123,7 @@ export class AppComponent {
   protected readonly importResult = signal<LeadImportResult | null>(null);
   protected readonly detailTab = signal<DetailTab>('overview');
   protected readonly detailExpanded = signal(true);
+  protected readonly toast = signal<ToastMessage | null>(null);
 
   protected readonly templates = computed(() => {
     const lead = this.selectedLead();
@@ -361,7 +370,7 @@ export class AppComponent {
 
     const toEmail = this.emailTo().trim();
     if (!toEmail) {
-      this.message.set('Enter a recipient email address.');
+      this.showToast('error', 'Email not sent', 'Enter a recipient email address.');
       return;
     }
 
@@ -382,15 +391,27 @@ export class AppComponent {
     this.http.post<Lead>(`${this.apiBase}/leads/${lead.id}/email`, form).subscribe({
       next: updated => {
         this.selectedLead.set(updated);
-        this.message.set(`Email sent to ${toEmail}.`);
+        const successMessage = `Email sent to ${toEmail}.`;
+        this.message.set(successMessage);
+        this.showToast('success', 'Email sent', successMessage);
         this.loading.set(false);
         this.search(false);
       },
       error: (error: HttpErrorResponse) => {
-        this.message.set(error.error?.message || 'Email could not be sent. Check SMTP settings and try again.');
+        const errorMessage = this.getErrorMessage(error, 'Email could not be sent. Check SMTP settings and try again.');
+        this.message.set(errorMessage);
+        this.showToast('error', 'Email failed', errorMessage);
         this.loading.set(false);
       }
     });
+  }
+
+  protected dismissToast(): void {
+    this.toast.set(null);
+    if (this.toastTimer) {
+      window.clearTimeout(this.toastTimer);
+      this.toastTimer = undefined;
+    }
   }
 
   private textToHtml(value: string): string {
@@ -412,6 +433,26 @@ export class AppComponent {
     const container = document.createElement('div');
     container.textContent = value;
     return container.innerHTML;
+  }
+
+  private showToast(kind: ToastKind, title: string, body: string): void {
+    this.toast.set({ kind, title, body });
+    if (this.toastTimer) {
+      window.clearTimeout(this.toastTimer);
+    }
+    this.toastTimer = window.setTimeout(() => this.toast.set(null), 6500);
+  }
+
+  private getErrorMessage(error: HttpErrorResponse, fallback: string): string {
+    if (typeof error.error === 'string' && error.error.trim()) {
+      return error.error;
+    }
+
+    if (error.error?.message) {
+      return error.error.message;
+    }
+
+    return fallback;
   }
 
   private loadEmailSettings(): void {

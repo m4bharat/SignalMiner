@@ -348,4 +348,14 @@
       }
     </aside>
   </section>
+
+  @if (toast(); as notice) {
+    <div class="toast" [class.success]="notice.kind === 'success'" [class.error]="notice.kind === 'error'" role="status" aria-live="polite">
+      <div>
+        <strong>{{ notice.title }}</strong>
+        <p>{{ notice.body }}</p>
+      </div>
+      <button type="button" class="toast-close" (click)="dismissToast()" aria-label="Dismiss notification">&times;</button>
+    </div>
+  }
 </main>

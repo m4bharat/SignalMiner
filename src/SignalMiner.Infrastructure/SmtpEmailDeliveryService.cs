@@ -1,6 +1,7 @@
-using System.Net;
-using System.Net.Mail;
+using MailKit.Net.Smtp;
+using MailKit.Security;
 using Microsoft.Extensions.Configuration;
+using MimeKit;
 using SignalMiner.Application;
 
 namespace SignalMiner.Infrastructure;
@@ -12,57 +13,107 @@ public sealed class SmtpEmailDeliveryService(IConfiguration configuration) : IEm
         var options = SmtpOptions.From(configuration);
         options.Validate();
 
-        using var mail = new MailMessage
+        var authenticatedSender = new MailboxAddress(options.FromName, options.Username);
+        var mail = new MimeMessage
         {
-            From = new MailAddress(options.FromEmail, options.FromName),
-            Subject = message.Subject,
-            Body = message.Body,
-            IsBodyHtml = message.IsBodyHtml
+            Sender = authenticatedSender,
+            Subject = message.Subject
         };
-        mail.To.Add(new MailAddress(message.ToEmail, message.ToName));
+        mail.From.Add(authenticatedSender);
+        mail.To.Add(new MailboxAddress(message.ToName, message.ToEmail));
 
-        if (!string.IsNullOrWhiteSpace(message.ReplyTo))
+        if (!options.FromEmail.Equals(options.Username, StringComparison.OrdinalIgnoreCase))
         {
-            mail.ReplyToList.Add(new MailAddress(message.ReplyTo));
+            mail.ReplyTo.Add(new MailboxAddress(options.FromName, options.FromEmail));
         }
 
         foreach (var cc in message.Cc)
         {
-            mail.CC.Add(new MailAddress(cc));
+            mail.Cc.Add(MailboxAddress.Parse(cc));
         }
 
         foreach (var bcc in message.Bcc)
         {
-            mail.Bcc.Add(new MailAddress(bcc));
+            mail.Bcc.Add(MailboxAddress.Parse(bcc));
+        }
+
+        if (!string.IsNullOrWhiteSpace(message.ReplyTo))
+        {
+            mail.ReplyTo.Add(MailboxAddress.Parse(message.ReplyTo));
+        }
+
+        var body = new BodyBuilder();
+        if (message.IsBodyHtml)
+        {
+            body.HtmlBody = message.Body;
+        }
+        else
+        {
+            body.TextBody = message.Body;
         }
 
         foreach (var attachment in message.Attachments)
         {
-            mail.Attachments.Add(new Attachment(
-                new MemoryStream(attachment.Content),
-                attachment.FileName,
-                string.IsNullOrWhiteSpace(attachment.ContentType) ? "application/octet-stream" : attachment.ContentType));
+            var contentType = string.IsNullOrWhiteSpace(attachment.ContentType)
+                ? ContentType.Parse("application/octet-stream")
+                : ContentType.Parse(attachment.ContentType);
+            body.Attachments.Add(attachment.FileName, attachment.Content, contentType);
         }
 
-        using var client = new SmtpClient(options.Host, options.Port)
-        {
-            EnableSsl = options.EnableSsl,
-            Credentials = new NetworkCredential(options.Username, options.Password),
-            DeliveryMethod = SmtpDeliveryMethod.Network
-        };
+        mail.Body = body.ToMessageBody();
 
+        using var client = new SmtpClient();
         try
         {
-            await client.SendMailAsync(mail, cancellationToken);
+            await client.ConnectAsync(options.Host, options.Port, GetSocketOptions(options), cancellationToken);
+            await client.AuthenticateAsync(options.Username, options.Password, cancellationToken);
+            await client.SendAsync(mail, cancellationToken);
+            await client.DisconnectAsync(true, cancellationToken);
         }
-        catch (SmtpException ex)
+        catch (MailKit.Security.AuthenticationException ex)
         {
-            throw new ManualEmailException($"Email could not be sent: {ex.Message}", 502);
+            throw new ManualEmailException(BuildAuthenticationErrorMessage(options, ex), 502);
+        }
+        catch (SmtpCommandException ex)
+        {
+            throw new ManualEmailException(BuildSmtpErrorMessage(ex.Message, options), 502);
+        }
+        catch (SmtpProtocolException ex)
+        {
+            throw new ManualEmailException($"Email could not be sent: Titan SMTP connection failed. Check the SMTP host, port, and SSL setting. Details: {ex.Message}", 502);
         }
         catch (InvalidOperationException ex)
         {
             throw new ManualEmailException($"Email could not be sent: {ex.Message}", 502);
         }
+    }
+
+    private static SecureSocketOptions GetSocketOptions(SmtpOptions options)
+    {
+        if (!options.EnableSsl)
+        {
+            return SecureSocketOptions.None;
+        }
+
+        return options.Port == 465
+            ? SecureSocketOptions.SslOnConnect
+            : SecureSocketOptions.StartTls;
+    }
+
+    private static string BuildAuthenticationErrorMessage(SmtpOptions options, MailKit.Security.AuthenticationException ex)
+    {
+        return $"Email could not be sent: Titan SMTP login failed for {options.Username}. Enable Titan third-party access and use the mailbox password or app password. Details: {ex.Message}";
+    }
+
+    private static string BuildSmtpErrorMessage(string message, SmtpOptions options)
+    {
+        if (message.Contains("Sender address rejected", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("not logged in", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"Email could not be sent: Titan rejected sender {options.Username}. Enable Titan third-party access for this mailbox and use the mailbox password or app password, then restart the API.";
+        }
+
+        return $"Email could not be sent: {message}";
     }
 
     private sealed record SmtpOptions(
@@ -79,7 +130,7 @@ public sealed class SmtpEmailDeliveryService(IConfiguration configuration) : IEm
             var section = configuration.GetSection("Email:Smtp");
             return new SmtpOptions(
                 section["Host"] ?? string.Empty,
-                int.TryParse(section["Port"], out var port) ? port : 465,
+                int.TryParse(section["Port"], out var port) ? port : 587,
                 bool.TryParse(section["EnableSsl"], out var enableSsl) ? enableSsl : true,
                 section["FromEmail"] ?? string.Empty,
                 section["FromName"] ?? "SignalMiner",
@@ -96,6 +147,9 @@ public sealed class SmtpEmailDeliveryService(IConfiguration configuration) : IEm
             {
                 throw new ManualEmailException("Email sending is not configured. Set Email:Smtp host, from email, username, and password.", 503);
             }
+
+            _ = new MailboxAddress(FromName, FromEmail);
+            _ = MailboxAddress.Parse(Username);
         }
     }
 }
