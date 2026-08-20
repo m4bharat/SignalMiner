@@ -52,9 +52,79 @@ public sealed partial class WebsiteExtractionService : IWebsiteExtractionService
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
         var page = await browser.NewPageAsync(new BrowserNewPageOptions { JavaScriptEnabled = true });
-        await page.GotoAsync(uri.ToString(), new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 15000 });
+        try
+        {
+            await page.GotoAsync(uri.ToString(), new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded, Timeout = 15000 });
+            await page.WaitForLoadStateAsync(LoadState.NetworkIdle, new PageWaitForLoadStateOptions { Timeout = 3000 });
+        }
+        catch (TimeoutException)
+        {
+            // Some public sites keep analytics or live connections open. Use the rendered HTML captured so far.
+        }
+        catch (PlaywrightException exception) when (exception.Message.Contains("Timeout", StringComparison.OrdinalIgnoreCase))
+        {
+            // Some public sites keep analytics or live connections open. Use the rendered HTML captured so far.
+        }
+        catch (PlaywrightException exception) when (IsNavigationFailure(exception))
+        {
+            throw new WebsiteExtractionException(BuildNavigationFailureMessage(uri, exception));
+        }
+
         cancellationToken.ThrowIfCancellationRequested();
-        return await page.ContentAsync();
+        return await CaptureContentAsync(uri, page, cancellationToken);
+    }
+
+    private static async Task<string> CaptureContentAsync(Uri uri, IPage page, CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            try
+            {
+                return await page.ContentAsync();
+            }
+            catch (PlaywrightException exception) when (IsPageStillChanging(exception) && attempt < 3)
+            {
+                await Task.Delay(500, cancellationToken);
+            }
+            catch (PlaywrightException exception) when (IsPageStillChanging(exception))
+            {
+                throw new WebsiteExtractionException($"Website is still redirecting or changing content: {uri.Host}. Try again later or use the final website URL.");
+            }
+        }
+
+        throw new WebsiteExtractionException($"Website content could not be read: {uri.Host}. Try again later or use another website URL.");
+    }
+
+    private static bool IsNavigationFailure(PlaywrightException exception) =>
+        exception.Message.Contains("net::ERR_", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPageStillChanging(PlaywrightException exception) =>
+        exception.Message.Contains("page is navigating", StringComparison.OrdinalIgnoreCase) ||
+        exception.Message.Contains("changing the content", StringComparison.OrdinalIgnoreCase);
+
+    private static string BuildNavigationFailureMessage(Uri uri, PlaywrightException exception)
+    {
+        if (exception.Message.Contains("ERR_NAME_NOT_RESOLVED", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"Website could not be reached: {uri.Host} did not resolve. Check the domain or use another website URL.";
+        }
+
+        if (exception.Message.Contains("ERR_CONNECTION_REFUSED", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"Website refused the connection: {uri.Host}. Try again later or use another website URL.";
+        }
+
+        if (exception.Message.Contains("ERR_CONNECTION_TIMED_OUT", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"Website timed out: {uri.Host}. Try again later or use another website URL.";
+        }
+
+        if (exception.Message.Contains("ERR_CERT", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"Website has a certificate problem: {uri.Host}. Use a valid website URL before enriching.";
+        }
+
+        return $"Website could not be reached: {uri.Host}. Try again later or use another website URL.";
     }
 
     private static int ScoreWebsite(string title, string? description, string body, string[] links)

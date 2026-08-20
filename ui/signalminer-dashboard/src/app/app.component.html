@@ -18,11 +18,23 @@
     <aside class="filters">
       <label>
         Search
-        <input [ngModel]="query()" (ngModelChange)="query.set($event)" placeholder="Name, company, email">
+        <input [ngModel]="query()" (ngModelChange)="query.set($event)" placeholder="Name, title, company, email, URL">
       </label>
       <label>
         Minimum fit
         <input type="number" [ngModel]="minFitScore()" (ngModelChange)="minFitScore.set($event)" min="0" max="100">
+      </label>
+      <label>
+        Source
+        <select [ngModel]="sourceFilter()" (ngModelChange)="sourceFilter.set($event)">
+          <option value="">Any</option>
+          <option value="Imported">Imported</option>
+          <option value="LinkedInProfileUrlOnly">LinkedIn</option>
+          <option value="GitHub">GitHub</option>
+          <option value="Website">Website</option>
+          <option value="X">X</option>
+          <option value="Manual">Manual</option>
+        </select>
       </label>
       <label>
         Contact status
@@ -36,7 +48,43 @@
           <option value="DoNotContact">Do not contact</option>
         </select>
       </label>
-      <button type="button" (click)="search()" [disabled]="loading()">Apply filters</button>
+      <div class="filter-actions">
+        <button type="button" (click)="search()" [disabled]="loading()">Apply</button>
+        <button type="button" class="secondary" (click)="clearFilters()" [disabled]="loading()">Clear</button>
+      </div>
+      <div class="import-panel">
+        <strong>Import contacts</strong>
+        <input type="file" accept=".csv,.xlsx" (change)="selectImportFile($event)">
+        <div class="import-actions">
+          <button type="button" (click)="previewImport()" [disabled]="loading() || !importFile()">Preview</button>
+          <button type="button" (click)="commitImport()" [disabled]="loading() || !importResult() || importResult()!.validRows === 0">Import</button>
+        </div>
+        @if (importResult(); as result) {
+          <div class="import-summary">
+            <span>{{ result.validRows }} valid</span>
+            <span>{{ result.skippedRows }} skipped</span>
+            <span>{{ result.issues.length }} issues</span>
+          </div>
+          @if (result.issues.length > 0) {
+            <ul class="import-issues">
+              @for (issue of result.issues.slice(0, 3); track issue.rowNumber + issue.field) {
+                <li>Row {{ issue.rowNumber }}: {{ issue.field }} - {{ issue.message }}</li>
+              }
+            </ul>
+          }
+          <div class="import-preview">
+            @for (row of result.previewRows.slice(0, 4); track row.rowNumber) {
+              <div>
+                <strong>{{ row.displayName }}</strong>
+                <span>{{ row.company || row.publicEmail }}</span>
+                @if (row.isDuplicate) {
+                  <em>{{ row.duplicateReason }}</em>
+                }
+              </div>
+            }
+          </div>
+        }
+      </div>
       <div class="policy">
         <strong>Compliance</strong>
         <span>No LinkedIn scraping</span>
@@ -48,7 +96,18 @@
     <section class="lead-table">
       <header>
         <h2>Leads</h2>
-        <span>{{ total() }} matches</span>
+        <div class="pager">
+          <span>{{ pageStart() }}-{{ pageEnd() }} of {{ total() }}</span>
+          <select [ngModel]="pageSize()" (ngModelChange)="changePageSize($event)">
+            <option [ngValue]="10">10</option>
+            <option [ngValue]="25">25</option>
+            <option [ngValue]="50">50</option>
+            <option [ngValue]="100">100</option>
+          </select>
+          <button type="button" class="icon-button" (click)="previousPage()" [disabled]="loading() || page() <= 1" title="Previous page">&lt;</button>
+          <span>Page {{ page() }} / {{ totalPages() }}</span>
+          <button type="button" class="icon-button" (click)="nextPage()" [disabled]="loading() || page() >= totalPages()" title="Next page">&gt;</button>
+        </div>
       </header>
       <table>
         <thead>

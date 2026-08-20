@@ -19,6 +19,7 @@ public static class ServiceCollectionExtensions
         services.AddDbContext<SignalMinerDbContext>(options => options.UseNpgsql(connectionString));
         services.AddScoped<ILeadRepository, LeadRepository>();
         services.AddScoped<ILeadScoringService, LeadScoringService>();
+        services.AddScoped<ILeadImportService, LeadImportService>();
         services.AddScoped<ILeadWorkflow, LeadWorkflow>();
         services.AddScoped<IWebsiteExtractionService, WebsiteExtractionService>();
         services.AddHttpClient<IXDiscoveryService, XDiscoveryService>(client =>

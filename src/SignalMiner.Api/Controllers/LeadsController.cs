@@ -1,4 +1,5 @@
 using Hangfire;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
 using SignalMiner.Api.Dtos;
 using SignalMiner.Application;
@@ -56,8 +57,19 @@ public sealed class LeadsController(
     [HttpPost("{id:guid}/enrich")]
     public async Task<ActionResult<LeadDto>> Enrich(Guid id, CancellationToken cancellationToken)
     {
-        var lead = await workflow.EnrichAsync(id, cancellationToken);
-        return lead is null ? NotFound() : Ok(LeadDto.From(lead));
+        try
+        {
+            var lead = await workflow.EnrichAsync(id, cancellationToken);
+            return lead is null ? NotFound() : Ok(LeadDto.From(lead));
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict(new { message = "This lead changed while enrichment was running. Refresh the list and try again." });
+        }
+        catch (WebsiteExtractionException ex)
+        {
+            return UnprocessableEntity(new { message = ex.Message });
+        }
     }
 
     [HttpPatch("{id:guid}/outreach-status")]
@@ -86,12 +98,29 @@ public sealed class LeadsController(
         [FromQuery] int? minFitScore,
         [FromQuery] ContactStatus? contactStatus,
         [FromQuery] LeadStatus? status,
+        [FromQuery] SourceKind? sourceKind,
+        [FromQuery] bool? importedOnly,
+        [FromQuery] bool? hasEmail,
+        [FromQuery] bool? hasLinkedIn,
+        [FromQuery] bool? hasWebsite,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 25,
         CancellationToken cancellationToken = default)
     {
         var result = await repository.SearchAsync(
-            new LeadSearchRequest(query, minFitScore, contactStatus, status, null, page <= 0 ? 1 : page, pageSize <= 0 ? 25 : pageSize),
+            new LeadSearchRequest(
+                query,
+                minFitScore,
+                contactStatus,
+                status,
+                sourceKind,
+                importedOnly,
+                hasEmail,
+                hasLinkedIn,
+                hasWebsite,
+                null,
+                page <= 0 ? 1 : page,
+                pageSize <= 0 ? 25 : pageSize),
             cancellationToken);
 
         return Ok(new LeadSearchDto(result.Items.Select(LeadDto.From).ToArray(), result.Total));
