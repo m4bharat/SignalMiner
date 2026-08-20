@@ -28,6 +28,20 @@ public sealed record UpdateOutreachStatusRequest(ContactStatus Status, string? N
 
 public sealed record OutreachEventRequest(OutreachEventType Type, string Body, ContactStatus? NewContactStatus);
 
+public sealed record SendManualEmailRequest(
+    string Subject,
+    string Body,
+    IReadOnlyList<EmailAttachment> Attachments);
+
+public sealed record EmailAttachment(string FileName, string ContentType, byte[] Content);
+
+public sealed record EmailMessage(
+    string ToEmail,
+    string ToName,
+    string Subject,
+    string Body,
+    IReadOnlyList<EmailAttachment> Attachments);
+
 public sealed record LeadScore(int Score, string Rationale);
 
 public sealed record LeadSearchResult(IReadOnlyList<Lead> Items, int Total);
@@ -62,6 +76,11 @@ public sealed class DiscoveryRateLimitException(string message, DateTimeOffset? 
 
 public sealed class WebsiteExtractionException(string message) : Exception(message);
 
+public sealed class ManualEmailException(string message, int statusCode = 400) : Exception(message)
+{
+    public int StatusCode { get; } = statusCode;
+}
+
 public interface ILeadRepository
 {
     Task<Lead?> GetAsync(Guid id, CancellationToken cancellationToken);
@@ -94,6 +113,16 @@ public interface ILeadScoringService
 public interface ILeadImportService
 {
     Task<LeadImportResult> ImportAsync(Stream file, string fileName, bool commit, CancellationToken cancellationToken);
+}
+
+public interface IEmailDeliveryService
+{
+    Task SendAsync(EmailMessage message, CancellationToken cancellationToken);
+}
+
+public interface IManualEmailService
+{
+    Task<Lead?> SendAsync(Guid leadId, SendManualEmailRequest request, CancellationToken cancellationToken);
 }
 
 public interface ILeadWorkflow

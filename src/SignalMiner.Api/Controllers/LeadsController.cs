@@ -12,7 +12,8 @@ namespace SignalMiner.Api.Controllers;
 [Route("api/[controller]")]
 public sealed class LeadsController(
     ILeadWorkflow workflow,
-    ILeadRepository repository) : ControllerBase
+    ILeadRepository repository,
+    IManualEmailService manualEmail) : ControllerBase
 {
     [HttpPost("discover")]
     public async Task<ActionResult<IReadOnlyList<LeadDto>>> Discover(
@@ -70,6 +71,58 @@ public sealed class LeadsController(
         {
             return UnprocessableEntity(new { message = ex.Message });
         }
+    }
+
+    [HttpPost("{id:guid}/email")]
+    [RequestSizeLimit(12_000_000)]
+    public async Task<ActionResult<LeadDto>> SendManualEmail(
+        Guid id,
+        [FromForm] string subject,
+        [FromForm] string body,
+        [FromForm] IReadOnlyList<IFormFile>? attachments,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var request = new SendManualEmailRequest(
+                subject,
+                body,
+                await ReadAttachmentsAsync(attachments, cancellationToken));
+            var lead = await manualEmail.SendAsync(id, request, cancellationToken);
+            return lead is null ? NotFound() : Ok(LeadDto.From(lead));
+        }
+        catch (ManualEmailException ex)
+        {
+            return StatusCode(ex.StatusCode, new { message = ex.Message });
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict(new { message = "This lead changed while the email was being sent. Refresh the list and check Titan sent mail before trying again." });
+        }
+    }
+
+    private static async Task<IReadOnlyList<EmailAttachment>> ReadAttachmentsAsync(
+        IReadOnlyList<IFormFile>? files,
+        CancellationToken cancellationToken)
+    {
+        if (files is null || files.Count == 0)
+        {
+            return [];
+        }
+
+        var attachments = new List<EmailAttachment>();
+        foreach (var file in files.Where(file => file.Length > 0))
+        {
+            await using var stream = file.OpenReadStream();
+            using var memory = new MemoryStream();
+            await stream.CopyToAsync(memory, cancellationToken);
+            attachments.Add(new EmailAttachment(
+                Path.GetFileName(file.FileName),
+                file.ContentType,
+                memory.ToArray()));
+        }
+
+        return attachments;
     }
 
     [HttpPatch("{id:guid}/outreach-status")]

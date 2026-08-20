@@ -285,6 +285,68 @@ dd {
   margin-bottom: 1rem;
 }
 
+.email-composer {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.editor-shell {
+  border: 1px solid #c8d1c8;
+  border-radius: 6px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.editor-toolbar {
+  display: flex;
+  gap: 0.3rem;
+  padding: 0.45rem;
+  border-bottom: 1px solid #dfe5dc;
+  background: #f5f7f1;
+}
+
+.tool-button {
+  min-width: 2.15rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 4px;
+  background: #e8ece6;
+  color: #243236;
+  font-weight: 700;
+}
+
+.email-editor {
+  min-height: 9rem;
+  max-height: 18rem;
+  overflow: auto;
+  padding: 0.75rem;
+  line-height: 1.45;
+  outline: none;
+}
+
+.email-editor p {
+  margin: 0 0 0.6rem;
+}
+
+.email-editor ul,
+.email-editor ol {
+  margin: 0 0 0.6rem;
+  padding-left: 1.4rem;
+}
+
+.attachment-list {
+  display: grid;
+  gap: 0.25rem;
+  color: #59666a;
+  font-size: 0.82rem;
+}
+
+.attachment-list span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .template {
   border: 1px solid #dfe5dc;
   border-radius: 6px;
@@ -293,6 +355,7 @@ dd {
   padding: 0.75rem;
   margin-top: 0.6rem;
   line-height: 1.45;
+  text-align: left;
 }
 
 .empty {

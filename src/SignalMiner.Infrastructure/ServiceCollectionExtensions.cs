@@ -21,6 +21,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ILeadScoringService, LeadScoringService>();
         services.AddScoped<ILeadImportService, LeadImportService>();
         services.AddScoped<ILeadWorkflow, LeadWorkflow>();
+        services.AddScoped<IManualEmailService, ManualEmailService>();
+        services.AddScoped<IEmailDeliveryService, SmtpEmailDeliveryService>();
         services.AddScoped<IWebsiteExtractionService, WebsiteExtractionService>();
         services.AddHttpClient<IXDiscoveryService, XDiscoveryService>(client =>
         {

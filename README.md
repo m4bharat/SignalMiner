@@ -77,6 +77,24 @@ SignalMiner is a compliant lead discovery and enrichment platform for finding po
 
 The dashboard expects the API at `http://localhost:5000`. Docker is not required for SignalMiner.
 
+## Manual Email Sending
+
+SignalMiner can send one manually reviewed email at a time from the lead detail panel. It does not send bulk email or automated campaigns.
+
+Configure SMTP through `Email:Smtp` settings or environment variables before using **Send email**:
+
+```powershell
+$env:Email__Smtp__Host='smtp.titan.email'
+$env:Email__Smtp__Port='465'
+$env:Email__Smtp__EnableSsl='true'
+$env:Email__Smtp__FromEmail='you@yourdomain.com'
+$env:Email__Smtp__FromName='Zextri'
+$env:Email__Smtp__Username='you@yourdomain.com'
+$env:Email__Smtp__Password='your-app-password-or-mailbox-password'
+```
+
+Titan may require third-party email access to be enabled. If two-factor authentication is enabled, use a Titan application password.
+
 ## Scoring Signals
 
 SignalMiner scores leads from public data using founder/operator keywords, SaaS keywords, AI keywords, public LinkedIn/X URL presence, GitHub posting/repository activity, and public website quality.

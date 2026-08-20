@@ -86,6 +86,9 @@ export class AppComponent {
   protected readonly loading = signal(false);
   protected readonly message = signal('Manual-review-first lead discovery workspace');
   protected readonly outreachNote = signal('');
+  protected readonly emailSubject = signal('');
+  protected readonly emailBodyHtml = signal('');
+  protected readonly emailAttachments = signal<File[]>([]);
   protected readonly importFile = signal<File | null>(null);
   protected readonly importResult = signal<LeadImportResult | null>(null);
 
@@ -237,6 +240,86 @@ export class AppComponent {
   protected selectLead(lead: Lead): void {
     this.selectedLead.set(lead);
     this.outreachNote.set('');
+    this.emailSubject.set(`Quick note from Zextri`);
+    this.emailBodyHtml.set(this.textToHtml(this.templates()[0] ?? ''));
+    this.emailAttachments.set([]);
+  }
+
+  protected useTemplate(template: string): void {
+    this.emailBodyHtml.set(this.textToHtml(template));
+  }
+
+  protected updateEmailBody(event: Event): void {
+    this.emailBodyHtml.set((event.target as HTMLElement).innerHTML);
+  }
+
+  protected formatEmail(command: string, value?: string): void {
+    document.execCommand(command, false, value);
+  }
+
+  protected addEmailLink(): void {
+    const url = window.prompt('Link URL');
+    if (!url) return;
+
+    const normalizedUrl = url.startsWith('http') ? url : `https://${url}`;
+    this.formatEmail('createLink', normalizedUrl);
+  }
+
+  protected selectEmailAttachments(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.emailAttachments.set(Array.from(input.files ?? []));
+  }
+
+  protected sendEmail(): void {
+    const lead = this.selectedLead();
+    if (!lead) return;
+
+    if (!lead.publicEmail) {
+      this.message.set('This lead does not have an email address.');
+      return;
+    }
+
+    this.loading.set(true);
+    const form = new FormData();
+    form.append('subject', this.emailSubject());
+    form.append('body', this.htmlToText(this.emailBodyHtml()));
+    for (const file of this.emailAttachments()) {
+      form.append('attachments', file, file.name);
+    }
+
+    this.http.post<Lead>(`${this.apiBase}/leads/${lead.id}/email`, form).subscribe({
+      next: updated => {
+        this.selectedLead.set(updated);
+        this.message.set(`Email sent to ${updated.publicEmail}.`);
+        this.loading.set(false);
+        this.search(false);
+      },
+      error: (error: HttpErrorResponse) => {
+        this.message.set(error.error?.message || 'Email could not be sent. Check SMTP settings and try again.');
+        this.loading.set(false);
+      }
+    });
+  }
+
+  private textToHtml(value: string): string {
+    return value
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+      .map(line => `<p>${this.escapeHtml(line)}</p>`)
+      .join('');
+  }
+
+  private htmlToText(value: string): string {
+    const container = document.createElement('div');
+    container.innerHTML = value;
+    return (container.innerText || container.textContent || '').trim();
+  }
+
+  private escapeHtml(value: string): string {
+    const container = document.createElement('div');
+    container.textContent = value;
+    return container.innerHTML;
   }
 
   protected updateStatus(status: ContactStatus): void {

@@ -414,6 +414,52 @@ public sealed class DiscoveryTests
         Assert.Empty(repository.Added);
     }
 
+    [Fact]
+    public async Task ManualEmailService_SendsOneLeadAndRecordsOutreach()
+    {
+        var lead = new Lead
+        {
+            DisplayName = "Chris Lindolph",
+            PublicEmail = "chris@dscturbo.com",
+            ContactStatus = ContactStatus.NotContacted
+        };
+        var repository = new SingleLeadRepository(lead);
+        var delivery = new RecordingEmailDeliveryService();
+        var service = new ManualEmailService(repository, delivery);
+
+        var updated = await service.SendAsync(
+            lead.Id,
+            new SendManualEmailRequest(
+                "Hello Chris",
+                "Manual note only.",
+                [new EmailAttachment("overview.pdf", "application/pdf", [1, 2, 3])]),
+            CancellationToken.None);
+
+        Assert.NotNull(updated);
+        var message = Assert.Single(delivery.Messages);
+        Assert.Equal("chris@dscturbo.com", message.ToEmail);
+        Assert.Equal("Hello Chris", message.Subject);
+        Assert.Equal("overview.pdf", Assert.Single(message.Attachments).FileName);
+        Assert.Equal(ContactStatus.Contacted, lead.ContactStatus);
+        var evt = Assert.Single(lead.OutreachEvents);
+        Assert.Equal(OutreachEventType.ManualEmailSent, evt.Type);
+        Assert.Contains("Attachments: overview.pdf", evt.Body);
+        Assert.Equal(ContactStatus.Contacted, evt.NewContactStatus);
+        Assert.True(repository.WasSaved);
+    }
+
+    [Fact]
+    public async Task ManualEmailService_RejectsLeadWithoutEmail()
+    {
+        var lead = new Lead { DisplayName = "LinkedIn Only" };
+        var service = new ManualEmailService(new SingleLeadRepository(lead), new RecordingEmailDeliveryService());
+
+        var exception = await Assert.ThrowsAsync<ManualEmailException>(() =>
+            service.SendAsync(lead.Id, new SendManualEmailRequest("Hello", "Body", []), CancellationToken.None));
+
+        Assert.Equal("This lead does not have a public email address.", exception.Message);
+    }
+
     private sealed class RecordingDiscoveryService(params Lead[] leads) : IGitHubDiscoveryService, IXDiscoveryService
     {
         public bool WasCalled { get; private set; }
@@ -483,6 +529,42 @@ public sealed class DiscoveryTests
         }
 
         public Task SaveChangesAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class SingleLeadRepository(Lead lead) : ILeadRepository
+    {
+        public bool WasSaved { get; private set; }
+
+        public Task<Lead?> GetAsync(Guid id, CancellationToken cancellationToken) =>
+            Task.FromResult(id == lead.Id ? lead : null);
+
+        public Task<LeadSearchResult> SearchAsync(LeadSearchRequest request, CancellationToken cancellationToken) =>
+            Task.FromResult(new LeadSearchResult([], 0));
+
+        public Task<IReadOnlySet<string>> FindExistingImportKeysAsync(
+            IEnumerable<string> emails,
+            IEnumerable<string> linkedInUrls,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlySet<string>>(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
+        public Task AddRangeAsync(IEnumerable<Lead> leads, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task SaveChangesAsync(CancellationToken cancellationToken)
+        {
+            WasSaved = true;
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingEmailDeliveryService : IEmailDeliveryService
+    {
+        public List<EmailMessage> Messages { get; } = [];
+
+        public Task SendAsync(EmailMessage message, CancellationToken cancellationToken)
+        {
+            Messages.Add(message);
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class StubHttpMessageHandler(Func<Uri, HttpResponseMessage> responder) : HttpMessageHandler

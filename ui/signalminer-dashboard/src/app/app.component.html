@@ -183,9 +183,44 @@
           <button type="button" (click)="updateStatus('Contacted')">Contacted</button>
           <button type="button" (click)="updateStatus('DoNotContact')">DNC</button>
         </div>
+        <section class="email-composer">
+          <h3>Email</h3>
+          <label>
+            Subject
+            <input [ngModel]="emailSubject()" (ngModelChange)="emailSubject.set($event)" placeholder="Subject">
+          </label>
+          <div class="editor-shell">
+            <div class="editor-toolbar" aria-label="Email formatting">
+              <button type="button" class="tool-button" (click)="formatEmail('bold')" title="Bold">B</button>
+              <button type="button" class="tool-button" (click)="formatEmail('italic')" title="Italic">I</button>
+              <button type="button" class="tool-button" (click)="formatEmail('insertUnorderedList')" title="Bulleted list">*</button>
+              <button type="button" class="tool-button" (click)="formatEmail('insertOrderedList')" title="Numbered list">1.</button>
+              <button type="button" class="tool-button" (click)="addEmailLink()" title="Add link">Link</button>
+            </div>
+            <div
+              class="email-editor"
+              contenteditable="true"
+              [innerHTML]="emailBodyHtml()"
+              (input)="updateEmailBody($event)"
+              aria-label="Email message editor">
+            </div>
+          </div>
+          <label>
+            Attachments
+            <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" (change)="selectEmailAttachments($event)">
+          </label>
+          @if (emailAttachments().length > 0) {
+            <div class="attachment-list">
+              @for (file of emailAttachments(); track file.name) {
+                <span>{{ file.name }}</span>
+              }
+            </div>
+          }
+          <button type="button" (click)="sendEmail()" [disabled]="loading() || !lead.publicEmail">Send email</button>
+        </section>
         <h3>Quick templates</h3>
         @for (template of templates(); track template) {
-          <p class="template">{{ template }}</p>
+          <button type="button" class="template" (click)="useTemplate(template)">{{ template }}</button>
         }
       } @else {
         <p class="empty">Select a lead to review fit, notes, and templates.</p>
