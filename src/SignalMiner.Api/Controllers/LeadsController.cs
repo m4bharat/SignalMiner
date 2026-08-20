@@ -77,16 +77,26 @@ public sealed class LeadsController(
     [RequestSizeLimit(12_000_000)]
     public async Task<ActionResult<LeadDto>> SendManualEmail(
         Guid id,
+        [FromForm] string? toEmail,
         [FromForm] string subject,
         [FromForm] string body,
+        [FromForm] string? bodyHtml,
+        [FromForm] string? replyTo,
+        [FromForm] string? cc,
+        [FromForm] string? bcc,
         [FromForm] IReadOnlyList<IFormFile>? attachments,
         CancellationToken cancellationToken)
     {
         try
         {
             var request = new SendManualEmailRequest(
+                toEmail,
                 subject,
                 body,
+                bodyHtml,
+                replyTo,
+                cc,
+                bcc,
                 await ReadAttachmentsAsync(attachments, cancellationToken));
             var lead = await manualEmail.SendAsync(id, request, cancellationToken);
             return lead is null ? NotFound() : Ok(LeadDto.From(lead));

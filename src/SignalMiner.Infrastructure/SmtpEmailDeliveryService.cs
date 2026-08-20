@@ -17,9 +17,25 @@ public sealed class SmtpEmailDeliveryService(IConfiguration configuration) : IEm
             From = new MailAddress(options.FromEmail, options.FromName),
             Subject = message.Subject,
             Body = message.Body,
-            IsBodyHtml = false
+            IsBodyHtml = message.IsBodyHtml
         };
         mail.To.Add(new MailAddress(message.ToEmail, message.ToName));
+
+        if (!string.IsNullOrWhiteSpace(message.ReplyTo))
+        {
+            mail.ReplyToList.Add(new MailAddress(message.ReplyTo));
+        }
+
+        foreach (var cc in message.Cc)
+        {
+            mail.CC.Add(new MailAddress(cc));
+        }
+
+        foreach (var bcc in message.Bcc)
+        {
+            mail.Bcc.Add(new MailAddress(bcc));
+        }
+
         foreach (var attachment in message.Attachments)
         {
             mail.Attachments.Add(new Attachment(

@@ -14,7 +14,7 @@
     </div>
   </section>
 
-  <section class="workspace">
+  <section class="workspace" [class.detail-expanded]="detailExpanded()">
     <aside class="filters">
       <label>
         Search
@@ -146,81 +146,202 @@
 
     <aside class="detail">
       @if (selectedLead(); as lead) {
-        <header>
-          <h2>{{ lead.displayName }}</h2>
-          <button type="button" (click)="enrich(lead)" [disabled]="loading()">Enrich</button>
-        </header>
-        <dl>
-          <dt>Fit score</dt>
-          <dd>{{ lead.fitScore }} - {{ lead.scoreRationale }}</dd>
-          <dt>Email</dt>
-          <dd>{{ lead.publicEmail || 'No public email found' }}</dd>
-          <dt>Company</dt>
-          <dd>{{ lead.company?.name || 'No company found' }}</dd>
-          <dt>Website</dt>
-          <dd><a [href]="lead.websiteUrl" target="_blank">{{ lead.websiteUrl || 'None' }}</a></dd>
-          <dt>X / Twitter</dt>
-          <dd><a [href]="lead.xUrl" target="_blank">{{ lead.xUrl || 'None' }}</a></dd>
-          <dt>LinkedIn URL</dt>
-          <dd><a [href]="lead.linkedInUrl" target="_blank">{{ lead.linkedInUrl || 'None' }}</a></dd>
-          <dt>Notes</dt>
-          <dd>{{ lead.notes || 'No notes yet' }}</dd>
-          <dt>Public sources</dt>
-          <dd>
-            @for (profile of lead.sourceProfiles || []; track profile.url) {
-              <a [href]="profile.url" target="_blank">{{ profile.kind }}</a>
-            } @empty {
-              None
-            }
-          </dd>
-        </dl>
-        <label>
-          Outreach note
-          <textarea [ngModel]="outreachNote()" (ngModelChange)="outreachNote.set($event)" rows="4"></textarea>
-        </label>
-        <div class="status-actions">
-          <button type="button" (click)="updateStatus('ReadyForManualOutreach')">Ready</button>
-          <button type="button" (click)="updateStatus('Contacted')">Contacted</button>
-          <button type="button" (click)="updateStatus('DoNotContact')">DNC</button>
-        </div>
-        <section class="email-composer">
-          <h3>Email</h3>
-          <label>
-            Subject
-            <input [ngModel]="emailSubject()" (ngModelChange)="emailSubject.set($event)" placeholder="Subject">
-          </label>
-          <div class="editor-shell">
-            <div class="editor-toolbar" aria-label="Email formatting">
-              <button type="button" class="tool-button" (click)="formatEmail('bold')" title="Bold">B</button>
-              <button type="button" class="tool-button" (click)="formatEmail('italic')" title="Italic">I</button>
-              <button type="button" class="tool-button" (click)="formatEmail('insertUnorderedList')" title="Bulleted list">*</button>
-              <button type="button" class="tool-button" (click)="formatEmail('insertOrderedList')" title="Numbered list">1.</button>
-              <button type="button" class="tool-button" (click)="addEmailLink()" title="Add link">Link</button>
-            </div>
-            <div
-              class="email-editor"
-              contenteditable="true"
-              [innerHTML]="emailBodyHtml()"
-              (input)="updateEmailBody($event)"
-              aria-label="Email message editor">
-            </div>
+        <header class="detail-header">
+          <div>
+            <h2>{{ lead.displayName }}</h2>
+            <p>{{ lead.roleTitle || lead.company?.name || 'Independent' }}</p>
           </div>
-          <label>
-            Attachments
-            <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" (change)="selectEmailAttachments($event)">
-          </label>
-          @if (emailAttachments().length > 0) {
-            <div class="attachment-list">
-              @for (file of emailAttachments(); track file.name) {
-                <span>{{ file.name }}</span>
+          <div class="detail-header-actions">
+            <button type="button" class="secondary panel-toggle" (click)="toggleDetailExpanded()">
+              {{ detailExpanded() ? 'Collapse' : 'Expand' }}
+            </button>
+            <button type="button" (click)="enrich(lead)" [disabled]="loading()">Enrich</button>
+          </div>
+        </header>
+
+        <nav class="detail-tabs" aria-label="Lead detail sections">
+          <button type="button" class="tab-button" [class.active]="detailTab() === 'overview'" (click)="detailTab.set('overview')">Overview</button>
+          <button type="button" class="tab-button" [class.active]="detailTab() === 'outreach'" (click)="detailTab.set('outreach')">Outreach</button>
+          <button type="button" class="tab-button" [class.active]="detailTab() === 'email'" (click)="detailTab.set('email')">Email</button>
+        </nav>
+
+        @if (detailTab() === 'overview') {
+          <section class="lead-summary">
+            <div>
+              <span>Fit score</span>
+              <strong>{{ lead.fitScore }}</strong>
+            </div>
+            <div>
+              <span>Status</span>
+              <strong>{{ lead.contactStatus }}</strong>
+            </div>
+          </section>
+
+          <section class="detail-section">
+            <h3>Contact</h3>
+            <div class="contact-grid">
+              <div class="contact-card">
+                <span>Email</span>
+                <strong>{{ lead.publicEmail || 'No public email' }}</strong>
+              </div>
+              @if (lead.company?.name) {
+                <div class="contact-card">
+                  <span>Company</span>
+                  <strong>{{ lead.company?.name }}</strong>
+                </div>
+              }
+              @if (lead.websiteUrl) {
+                <a class="contact-card" [href]="lead.websiteUrl" target="_blank">
+                  <span>Website</span>
+                  <strong>{{ lead.websiteUrl }}</strong>
+                </a>
+              }
+              @if (lead.xUrl) {
+                <a class="contact-card" [href]="lead.xUrl" target="_blank">
+                  <span>X / Twitter</span>
+                  <strong>{{ lead.xUrl }}</strong>
+                </a>
+              }
+              @if (lead.linkedInUrl) {
+                <a class="contact-card" [href]="lead.linkedInUrl" target="_blank">
+                  <span>LinkedIn</span>
+                  <strong>{{ lead.linkedInUrl }}</strong>
+                </a>
               }
             </div>
+          </section>
+
+          <section class="detail-section">
+            <h3>Fit reason</h3>
+            <p>{{ lead.scoreRationale || 'No fit reason yet.' }}</p>
+          </section>
+
+          @if (lead.notes) {
+            <section class="detail-section">
+              <h3>Notes</h3>
+              <p>{{ lead.notes }}</p>
+            </section>
           }
-          <button type="button" (click)="sendEmail()" [disabled]="loading() || !lead.publicEmail">Send email</button>
-        </section>
-        <h3>Quick templates</h3>
-        @for (template of templates(); track template) {
-          <button type="button" class="template" (click)="useTemplate(template)">{{ template }}</button>
+
+          <section class="detail-section">
+            <h3>Public sources</h3>
+            <div class="source-chips">
+              @for (profile of lead.sourceProfiles || []; track profile.url) {
+                <a [href]="profile.url" target="_blank">{{ profile.kind }}</a>
+              } @empty {
+                <span>None</span>
+              }
+            </div>
+          </section>
+        } @else if (detailTab() === 'outreach') {
+          <section class="detail-section">
+            <h3>Manual outreach</h3>
+            <label>
+              Outreach note
+              <textarea [ngModel]="outreachNote()" (ngModelChange)="outreachNote.set($event)" rows="6" placeholder="Add a short note before changing status"></textarea>
+            </label>
+            <div class="status-actions">
+              <button type="button" (click)="updateStatus('ReadyForManualOutreach')">Ready</button>
+              <button type="button" (click)="updateStatus('Contacted')">Contacted</button>
+              <button type="button" (click)="updateStatus('DoNotContact')">DNC</button>
+            </div>
+          </section>
+        } @else {
+          <div class="email-workspace">
+            <section class="email-composer">
+              <h3>Email</h3>
+              @if (!lead.publicEmail) {
+                <p class="muted">No email is saved for this lead. Add a recipient below before sending.</p>
+              }
+              <details class="email-settings">
+                <summary>Email settings</summary>
+                <label>
+                  Reply-to
+                  <input [ngModel]="emailReplyTo()" (ngModelChange)="emailReplyTo.set($event)" placeholder="reply@yourcompany.com">
+                </label>
+                <label>
+                  CC
+                  <input [ngModel]="emailCc()" (ngModelChange)="emailCc.set($event)" placeholder="manager@yourcompany.com">
+                </label>
+                <label>
+                  BCC
+                  <input [ngModel]="emailBcc()" (ngModelChange)="emailBcc.set($event)" placeholder="archive@yourcompany.com">
+                </label>
+                <div class="signature-field">
+                  <span>Signature</span>
+                  <div class="editor-shell">
+                    <div class="editor-toolbar" aria-label="Signature formatting">
+                      <button type="button" class="tool-button" (click)="formatEmail('bold')" title="Bold">B</button>
+                      <button type="button" class="tool-button" (click)="formatEmail('italic')" title="Italic">I</button>
+                      <button type="button" class="tool-button" (click)="formatEmail('insertUnorderedList')" title="Bulleted list">*</button>
+                      <button type="button" class="tool-button" (click)="formatEmail('insertOrderedList')" title="Numbered list">1.</button>
+                      <button type="button" class="tool-button" (click)="addEmailLink()" title="Add link">Link</button>
+                    </div>
+                    <div
+                      class="signature-editor"
+                      contenteditable="true"
+                      [innerHTML]="emailSignatureHtml()"
+                      (input)="updateEmailSignature($event)"
+                      aria-label="Email signature editor">
+                    </div>
+                  </div>
+                </div>
+                <label class="inline-check">
+                  <input type="checkbox" [ngModel]="includeSignature()" (ngModelChange)="setIncludeSignature($event)">
+                  Include signature
+                </label>
+                <div class="email-settings-actions">
+                  <button type="button" class="secondary" (click)="saveEmailSettings()">Save settings</button>
+                  <button type="button" class="secondary" (click)="useZextriSignature()">Use Zextri signature</button>
+                  <button type="button" class="secondary" (click)="insertSignature()">Insert signature</button>
+                </div>
+              </details>
+              <label>
+                To
+                <input type="email" [ngModel]="emailTo()" (ngModelChange)="emailTo.set($event)" placeholder="recipient@company.com">
+              </label>
+              <label>
+                Subject
+                <input [ngModel]="emailSubject()" (ngModelChange)="emailSubject.set($event)" placeholder="Subject">
+              </label>
+              <div class="editor-shell">
+                <div class="editor-toolbar" aria-label="Email formatting">
+                  <button type="button" class="tool-button" (click)="formatEmail('bold')" title="Bold">B</button>
+                  <button type="button" class="tool-button" (click)="formatEmail('italic')" title="Italic">I</button>
+                  <button type="button" class="tool-button" (click)="formatEmail('insertUnorderedList')" title="Bulleted list">*</button>
+                  <button type="button" class="tool-button" (click)="formatEmail('insertOrderedList')" title="Numbered list">1.</button>
+                  <button type="button" class="tool-button" (click)="addEmailLink()" title="Add link">Link</button>
+                </div>
+                <div
+                  class="email-editor"
+                  contenteditable="true"
+                  [innerHTML]="emailBodyHtml()"
+                  (input)="updateEmailBody($event)"
+                  aria-label="Email message editor">
+                </div>
+              </div>
+              <label>
+                Attachments
+                <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" (change)="selectEmailAttachments($event)">
+              </label>
+              @if (emailAttachments().length > 0) {
+                <div class="attachment-list">
+                  @for (file of emailAttachments(); track file.name) {
+                    <span>{{ file.name }}</span>
+                  }
+                </div>
+              }
+              <button type="button" (click)="sendEmail()" [disabled]="loading() || !emailTo().trim()">Send email</button>
+            </section>
+            <section class="detail-section templates-panel">
+              <h3>Quick templates</h3>
+              <div class="template-list">
+                @for (template of templates(); track template) {
+                  <button type="button" class="template" (click)="useTemplate(template)">{{ template }}</button>
+                }
+              </div>
+            </section>
+          </div>
         }
       } @else {
         <p class="empty">Select a lead to review fit, notes, and templates.</p>

@@ -430,8 +430,13 @@ public sealed class DiscoveryTests
         var updated = await service.SendAsync(
             lead.Id,
             new SendManualEmailRequest(
+                null,
                 "Hello Chris",
                 "Manual note only.",
+                null,
+                null,
+                null,
+                null,
                 [new EmailAttachment("overview.pdf", "application/pdf", [1, 2, 3])]),
             CancellationToken.None);
 
@@ -455,9 +460,9 @@ public sealed class DiscoveryTests
         var service = new ManualEmailService(new SingleLeadRepository(lead), new RecordingEmailDeliveryService());
 
         var exception = await Assert.ThrowsAsync<ManualEmailException>(() =>
-            service.SendAsync(lead.Id, new SendManualEmailRequest("Hello", "Body", []), CancellationToken.None));
+            service.SendAsync(lead.Id, new SendManualEmailRequest(null, "Hello", "Body", null, null, null, null, []), CancellationToken.None));
 
-        Assert.Equal("This lead does not have a public email address.", exception.Message);
+        Assert.Equal("Enter a valid recipient email address.", exception.Message);
     }
 
     private sealed class RecordingDiscoveryService(params Lead[] leads) : IGitHubDiscoveryService, IXDiscoveryService

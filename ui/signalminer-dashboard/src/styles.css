@@ -89,6 +89,11 @@ h1 {
   display: grid;
   grid-template-columns: 17rem minmax(28rem, 1fr) 25rem;
   min-height: calc(100vh - 83px);
+  transition: grid-template-columns 0.18s ease;
+}
+
+.workspace.detail-expanded {
+  grid-template-columns: 17rem minmax(22rem, 1fr) minmax(34rem, 42vw);
 }
 
 .filters,
@@ -103,6 +108,12 @@ h1 {
 
 .detail {
   border-left: 1px solid #dfe5dc;
+  overflow: auto;
+  min-width: 0;
+}
+
+.detail > * {
+  min-width: 0;
 }
 
 label {
@@ -199,6 +210,63 @@ label {
   border-bottom: 1px solid #e5e9e2;
 }
 
+.detail-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: -1rem -1rem 0;
+  background: #fbfcf8;
+}
+
+.detail-header div {
+  min-width: 0;
+}
+
+.detail-header h2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-header p {
+  margin-top: 0.2rem;
+  color: #667175;
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.detail-header-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 0.5rem;
+}
+
+.panel-toggle {
+  min-width: 5.4rem;
+}
+
+.detail-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.35rem;
+  padding: 0.75rem 0;
+}
+
+.tab-button {
+  border: 1px solid #dfe5dc;
+  background: #ffffff;
+  color: #445054;
+  padding: 0.52rem 0.35rem;
+}
+
+.tab-button.active {
+  border-color: #174d4d;
+  background: #e8f1ed;
+  color: #174d4d;
+  font-weight: 700;
+}
+
 .pager {
   display: flex;
   align-items: center;
@@ -285,10 +353,170 @@ dd {
   margin-bottom: 1rem;
 }
 
+.lead-summary {
+  display: grid;
+  grid-template-columns: 7.5rem 1fr;
+  gap: 0.6rem;
+  margin-bottom: 0.85rem;
+}
+
+.lead-summary div,
+.contact-card,
+.detail-section {
+  border: 1px solid #dfe5dc;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.lead-summary div {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.75rem;
+}
+
+.lead-summary span,
+.contact-card span {
+  color: #667175;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+}
+
+.lead-summary strong {
+  overflow-wrap: anywhere;
+  font-size: 1rem;
+}
+
+.lead-summary div:first-child strong {
+  color: #0b7d21;
+  font-size: 1.65rem;
+  line-height: 1;
+}
+
+.detail-section {
+  display: grid;
+  gap: 0.65rem;
+  margin-bottom: 0.85rem;
+  padding: 0.85rem;
+}
+
+.detail-section h3,
+.email-composer h3 {
+  font-size: 1rem;
+}
+
+.detail-section p {
+  color: #2e3a3f;
+  line-height: 1.45;
+}
+
+.contact-grid,
+.template-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.contact-card {
+  display: grid;
+  gap: 0.22rem;
+  min-width: 0;
+  padding: 0.65rem;
+  color: #2e3a3f;
+  text-decoration: none;
+}
+
+.contact-card strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+
+.source-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.source-chips a,
+.source-chips span {
+  border: 1px solid #dfe5dc;
+  border-radius: 999px;
+  background: #f5f7f1;
+  color: #445054;
+  padding: 0.32rem 0.55rem;
+  font-size: 0.82rem;
+  text-decoration: none;
+}
+
 .email-composer {
   display: grid;
   gap: 0.5rem;
   margin-bottom: 1rem;
+  border: 1px solid #dfe5dc;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 0.85rem;
+}
+
+.email-workspace {
+  display: grid;
+  gap: 1rem;
+}
+
+.workspace.detail-expanded .email-workspace {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+.workspace.detail-expanded .email-composer,
+.workspace.detail-expanded .templates-panel {
+  min-width: 0;
+  width: 100%;
+}
+
+.email-settings {
+  border: 1px solid #dfe5dc;
+  border-radius: 6px;
+  background: #f8faf5;
+  padding: 0.65rem;
+}
+
+.email-settings summary {
+  cursor: pointer;
+  color: #174d4d;
+  font-weight: 700;
+}
+
+.email-settings[open] summary {
+  margin-bottom: 0.7rem;
+}
+
+.inline-check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.inline-check input {
+  width: auto;
+}
+
+.email-settings-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.5rem;
+}
+
+.signature-field {
+  display: grid;
+  gap: 0.45rem;
+  margin-bottom: 0.8rem;
+}
+
+.signature-field > span {
+  color: #667175;
+  font-size: 0.76rem;
+  text-transform: uppercase;
 }
 
 .editor-shell {
@@ -315,7 +543,8 @@ dd {
   font-weight: 700;
 }
 
-.email-editor {
+.email-editor,
+.signature-editor {
   min-height: 9rem;
   max-height: 18rem;
   overflow: auto;
@@ -324,12 +553,30 @@ dd {
   outline: none;
 }
 
-.email-editor p {
+.signature-editor {
+  min-height: 7rem;
+  max-height: 14rem;
+}
+
+.workspace.detail-expanded .email-editor {
+  min-height: 16rem;
+  max-height: 30rem;
+}
+
+.workspace.detail-expanded .signature-editor {
+  min-height: 9rem;
+  max-height: 20rem;
+}
+
+.email-editor p,
+.signature-editor p {
   margin: 0 0 0.6rem;
 }
 
 .email-editor ul,
-.email-editor ol {
+.email-editor ol,
+.signature-editor ul,
+.signature-editor ol {
   margin: 0 0 0.6rem;
   padding-left: 1.4rem;
 }
@@ -358,13 +605,24 @@ dd {
   text-align: left;
 }
 
+.template-list .template {
+  margin-top: 0;
+}
+
+.muted {
+  color: #667175;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
 .empty {
   color: #667175;
   padding: 1rem;
 }
 
 @media (max-width: 1100px) {
-  .workspace {
+  .workspace,
+  .workspace.detail-expanded {
     grid-template-columns: 15rem 1fr;
   }
 
@@ -373,12 +631,17 @@ dd {
     border-left: 0;
     border-top: 1px solid #dfe5dc;
   }
+
+  .workspace.detail-expanded .email-workspace {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 760px) {
   .topbar,
   .discovery,
-  .workspace {
+  .workspace,
+  .workspace.detail-expanded {
     display: grid;
     grid-template-columns: 1fr;
   }

@@ -1,4 +1,5 @@
 using SignalMiner.Domain;
+using System.Net.Mail;
 
 namespace SignalMiner.Application;
 
@@ -17,9 +18,10 @@ public sealed class ManualEmailService(
             return null;
         }
 
-        if (string.IsNullOrWhiteSpace(lead.PublicEmail))
+        var toEmail = ParseOptionalEmail(request.ToEmail, "To") ?? ParseOptionalEmail(lead.PublicEmail, "Lead email");
+        if (string.IsNullOrWhiteSpace(toEmail))
         {
-            throw new ManualEmailException("This lead does not have a public email address.");
+            throw new ManualEmailException("Enter a valid recipient email address.");
         }
 
         if (string.IsNullOrWhiteSpace(request.Subject))
@@ -32,6 +34,11 @@ public sealed class ManualEmailService(
             throw new ManualEmailException("Email body is required.");
         }
 
+        var cc = ParseEmailList(request.Cc, "CC");
+        var bcc = ParseEmailList(request.Bcc, "BCC");
+        var replyTo = ParseOptionalEmail(request.ReplyTo, "Reply-to");
+        var bodyHtml = string.IsNullOrWhiteSpace(request.BodyHtml) ? null : request.BodyHtml.Trim();
+
         if (request.Attachments.Count > MaxAttachmentCount)
         {
             throw new ManualEmailException($"Attach up to {MaxAttachmentCount} files per email.");
@@ -43,7 +50,16 @@ public sealed class ManualEmailService(
         }
 
         await delivery.SendAsync(
-            new EmailMessage(lead.PublicEmail, lead.DisplayName, request.Subject.Trim(), request.Body.Trim(), request.Attachments),
+            new EmailMessage(
+                toEmail,
+                lead.DisplayName,
+                request.Subject.Trim(),
+                bodyHtml ?? request.Body.Trim(),
+                bodyHtml is not null,
+                replyTo,
+                cc,
+                bcc,
+                request.Attachments),
             cancellationToken);
 
         lead.ContactStatus = ContactStatus.Contacted;
@@ -51,7 +67,7 @@ public sealed class ManualEmailService(
         lead.OutreachEvents.Add(new OutreachEvent
         {
             Type = OutreachEventType.ManualEmailSent,
-            Body = BuildOutreachEventBody(request),
+            Body = BuildOutreachEventBody(request, toEmail),
             NewContactStatus = ContactStatus.Contacted
         });
 
@@ -59,13 +75,24 @@ public sealed class ManualEmailService(
         return lead;
     }
 
-    private static string BuildOutreachEventBody(SendManualEmailRequest request)
+    private static string BuildOutreachEventBody(SendManualEmailRequest request, string toEmail)
     {
         var parts = new List<string>
         {
             $"Subject: {request.Subject.Trim()}",
+            $"To: {toEmail}",
             request.Body.Trim()
         };
+
+        if (!string.IsNullOrWhiteSpace(request.ReplyTo))
+        {
+            parts.Add($"Reply-to: {request.ReplyTo.Trim()}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Cc))
+        {
+            parts.Add($"CC: {request.Cc.Trim()}");
+        }
 
         if (request.Attachments.Count > 0)
         {
@@ -73,5 +100,49 @@ public sealed class ManualEmailService(
         }
 
         return string.Join(Environment.NewLine, parts);
+    }
+
+    private static string? ParseOptionalEmail(string? value, string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        try
+        {
+            return new MailAddress(value.Trim()).Address;
+        }
+        catch (FormatException)
+        {
+            throw new ManualEmailException($"{fieldName} must be a valid email address.");
+        }
+    }
+
+    private static IReadOnlyList<string> ParseEmailList(string? value, string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return [];
+        }
+
+        var emails = value
+            .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        foreach (var email in emails)
+        {
+            try
+            {
+                _ = new MailAddress(email);
+            }
+            catch (FormatException)
+            {
+                throw new ManualEmailException($"{fieldName} contains an invalid email address: {email}");
+            }
+        }
+
+        return emails;
     }
 }

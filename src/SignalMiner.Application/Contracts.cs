@@ -29,8 +29,13 @@ public sealed record UpdateOutreachStatusRequest(ContactStatus Status, string? N
 public sealed record OutreachEventRequest(OutreachEventType Type, string Body, ContactStatus? NewContactStatus);
 
 public sealed record SendManualEmailRequest(
+    string? ToEmail,
     string Subject,
     string Body,
+    string? BodyHtml,
+    string? ReplyTo,
+    string? Cc,
+    string? Bcc,
     IReadOnlyList<EmailAttachment> Attachments);
 
 public sealed record EmailAttachment(string FileName, string ContentType, byte[] Content);
@@ -40,6 +45,10 @@ public sealed record EmailMessage(
     string ToName,
     string Subject,
     string Body,
+    bool IsBodyHtml,
+    string? ReplyTo,
+    IReadOnlyList<string> Cc,
+    IReadOnlyList<string> Bcc,
     IReadOnlyList<EmailAttachment> Attachments);
 
 public sealed record LeadScore(int Score, string Rationale);
