@@ -8,7 +8,7 @@ namespace SignalMiner.Infrastructure;
 
 public sealed class SmtpEmailDeliveryService(IConfiguration configuration) : IEmailDeliveryService
 {
-    public async Task SendAsync(EmailMessage message, CancellationToken cancellationToken)
+    public async Task<EmailDeliveryResult> SendAsync(EmailMessage message, CancellationToken cancellationToken)
     {
         var options = SmtpOptions.From(configuration);
         options.Validate();
@@ -67,8 +67,12 @@ public sealed class SmtpEmailDeliveryService(IConfiguration configuration) : IEm
         {
             await client.ConnectAsync(options.Host, options.Port, GetSocketOptions(options), cancellationToken);
             await client.AuthenticateAsync(options.Username, options.Password, cancellationToken);
-            await client.SendAsync(mail, cancellationToken);
+            var providerResponse = await client.SendAsync(mail, cancellationToken);
             await client.DisconnectAsync(true, cancellationToken);
+            return new EmailDeliveryResult(
+                "Submitted",
+                ExtractProviderMessageId(providerResponse) ?? mail.MessageId,
+                DateTimeOffset.UtcNow);
         }
         catch (MailKit.Security.AuthenticationException ex)
         {
@@ -98,6 +102,21 @@ public sealed class SmtpEmailDeliveryService(IConfiguration configuration) : IEm
         return options.Port == 465
             ? SecureSocketOptions.SslOnConnect
             : SecureSocketOptions.StartTls;
+    }
+
+    private static string? ExtractProviderMessageId(string providerResponse)
+    {
+        if (string.IsNullOrWhiteSpace(providerResponse))
+        {
+            return null;
+        }
+
+        var trimmed = providerResponse.Trim();
+        var idStart = trimmed.IndexOf('<', StringComparison.Ordinal);
+        var idEnd = trimmed.IndexOf('>', StringComparison.Ordinal);
+        return idStart >= 0 && idEnd > idStart
+            ? trimmed[idStart..(idEnd + 1)]
+            : trimmed;
     }
 
     private static string BuildAuthenticationErrorMessage(SmtpOptions options, MailKit.Security.AuthenticationException ex)

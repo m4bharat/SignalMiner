@@ -1,0 +1,12 @@
+{
+  "id": "quick-introduction",
+  "name": "Quick Introduction",
+  "description": "Personal, minimal founder-led cold outreach.",
+  "category": "Cold outreach",
+  "version": "1.0.0",
+  "intendedUse": "Use for a first touch with a relevant lead.",
+  "defaultSubject": "A quick idea for {{company}}",
+  "htmlPath": "assets/email-templates/quick-introduction/template.html",
+  "supportedVariables": ["firstName", "fullName", "company", "senderName", "senderTitle", "websiteUrl", "demoUrl", "unsubscribeUrl"],
+  "requiredVariables": ["firstName", "company", "unsubscribeUrl"]
+}

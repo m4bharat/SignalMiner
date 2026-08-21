@@ -36,7 +36,10 @@ public sealed record SendManualEmailRequest(
     string? ReplyTo,
     string? Cc,
     string? Bcc,
-    IReadOnlyList<EmailAttachment> Attachments);
+    IReadOnlyList<EmailAttachment> Attachments,
+    bool IsTest = false,
+    string? TemplateId = null,
+    string? TemplateVersion = null);
 
 public sealed record EmailAttachment(string FileName, string ContentType, byte[] Content);
 
@@ -50,6 +53,11 @@ public sealed record EmailMessage(
     IReadOnlyList<string> Cc,
     IReadOnlyList<string> Bcc,
     IReadOnlyList<EmailAttachment> Attachments);
+
+public sealed record EmailDeliveryResult(
+    string Status,
+    string? ProviderMessageId,
+    DateTimeOffset SubmittedAt);
 
 public sealed record LeadScore(int Score, string Rationale);
 
@@ -126,7 +134,7 @@ public interface ILeadImportService
 
 public interface IEmailDeliveryService
 {
-    Task SendAsync(EmailMessage message, CancellationToken cancellationToken);
+    Task<EmailDeliveryResult> SendAsync(EmailMessage message, CancellationToken cancellationToken);
 }
 
 public interface IManualEmailService

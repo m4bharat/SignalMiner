@@ -507,6 +507,79 @@ dd {
   gap: 0.5rem;
 }
 
+.recipient-card,
+.sender-card,
+.email-preview {
+  display: grid;
+  gap: 0.25rem;
+  border: 1px solid #dfe5dc;
+  border-radius: 6px;
+  background: #f8faf5;
+  padding: 0.65rem;
+}
+
+.recipient-card span,
+.sender-card span,
+.email-preview span {
+  color: #667175;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+}
+
+.recipient-card strong,
+.sender-card strong,
+.email-preview strong {
+  overflow-wrap: anywhere;
+  color: #1e2a2f;
+  font-size: 0.9rem;
+}
+
+.draft-warnings {
+  display: grid;
+  gap: 0.2rem;
+  border: 1px solid #f1c27d;
+  border-radius: 6px;
+  background: #fff8eb;
+  color: #7a3d00;
+  padding: 0.55rem 0.65rem;
+  font-size: 0.82rem;
+}
+
+.draft-warnings p {
+  line-height: 1.35;
+}
+
+.email-secondary-actions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+}
+
+.email-preview {
+  gap: 0.55rem;
+  background: #ffffff;
+}
+
+.preview-body,
+.preview-frame {
+  max-height: 18rem;
+  overflow: auto;
+  border-top: 1px solid #e5e9e2;
+  padding-top: 0.65rem;
+  color: #2e3a3f;
+  line-height: 1.45;
+}
+
+.preview-frame {
+  width: 100%;
+  min-height: 24rem;
+  max-height: none;
+  border: 1px solid #e5e9e2;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 0;
+}
+
 .signature-field {
   display: grid;
   gap: 0.45rem;
@@ -595,6 +668,8 @@ dd {
 }
 
 .template {
+  display: grid;
+  gap: 0.25rem;
   border: 1px solid #dfe5dc;
   border-radius: 6px;
   background: #ffffff;
@@ -603,6 +678,22 @@ dd {
   margin-top: 0.6rem;
   line-height: 1.45;
   text-align: left;
+}
+
+.template strong,
+.template span,
+.template em {
+  display: block;
+}
+
+.template span,
+.template em {
+  color: #667175;
+  font-size: 0.82rem;
+}
+
+.template em {
+  font-style: normal;
 }
 
 .template-list .template {
@@ -698,5 +789,9 @@ dd {
   .detail {
     border: 0;
     border-bottom: 1px solid #dfe5dc;
+  }
+
+  .email-secondary-actions {
+    grid-template-columns: 1fr 1fr;
   }
 }

@@ -250,14 +250,26 @@
           <div class="email-workspace">
             <section class="email-composer">
               <h3>Email</h3>
-              @if (!lead.publicEmail) {
-                <p class="muted">No email is saved for this lead. Add a recipient below before sending.</p>
+              <div class="recipient-card" aria-live="polite">
+                <span>Selected recipient</span>
+                <strong>{{ selectedRecipientLabel() }}</strong>
+              </div>
+              @if (composerWarnings().length > 0) {
+                <div class="draft-warnings" role="alert">
+                  @for (warning of composerWarnings(); track warning) {
+                    <p>{{ warning }}</p>
+                  }
+                </div>
               }
               <details class="email-settings">
                 <summary>Email settings</summary>
+                <div class="sender-card">
+                  <span>Sender</span>
+                  <strong>Bharat from Zextri &lt;hello&#64;zextri.com&gt;</strong>
+                </div>
                 <label>
                   Reply-to
-                  <input [ngModel]="emailReplyTo()" (ngModelChange)="emailReplyTo.set($event)" placeholder="reply@yourcompany.com">
+                  <input [ngModel]="emailReplyTo()" readonly aria-readonly="true">
                 </label>
                 <label>
                   CC
@@ -298,12 +310,29 @@
               </details>
               <label>
                 To
-                <input type="email" [ngModel]="emailTo()" (ngModelChange)="emailTo.set($event)" placeholder="recipient@company.com">
+                <input type="email" [ngModel]="emailTo()" (ngModelChange)="updateEmailTo($event)" placeholder="recipient@company.com">
               </label>
               <label>
                 Subject
-                <input [ngModel]="emailSubject()" (ngModelChange)="emailSubject.set($event)" placeholder="Subject">
+                <input [ngModel]="emailSubject()" (ngModelChange)="updateEmailSubject($event)" placeholder="Subject">
               </label>
+              <label>
+                Email template
+                <select [ngModel]="selectedEmailTemplateId()" (ngModelChange)="selectEmailTemplate($event)" [disabled]="emailTemplates().length === 0">
+                  @for (template of emailTemplates(); track template.id) {
+                    <option [value]="template.id">{{ template.name }} v{{ template.version }}</option>
+                  }
+                  @if (emailTemplates().length === 0) {
+                    <option value="">Loading templates...</option>
+                  }
+                </select>
+              </label>
+              <div class="email-secondary-actions">
+                <button type="button" class="secondary" (click)="regenerateOpening()" [disabled]="emailTemplates().length === 0">Personalize</button>
+                <button type="button" class="secondary" (click)="previewEmail()" [disabled]="emailTemplates().length === 0">Preview</button>
+                <button type="button" class="secondary" (click)="resetToTemplate()" [disabled]="emailTemplates().length === 0">Reset to template</button>
+                <button type="button" class="secondary" (click)="sendTestEmail()" [disabled]="emailSending() || emailTemplates().length === 0">Send test email</button>
+              </div>
               <div class="editor-shell">
                 <div class="editor-toolbar" aria-label="Email formatting">
                   <button type="button" class="tool-button" (click)="formatEmail('bold')" title="Bold">B</button>
@@ -320,24 +349,38 @@
                   aria-label="Email message editor">
                 </div>
               </div>
-              <label>
-                Attachments
-                <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" (change)="selectEmailAttachments($event)">
-              </label>
-              @if (emailAttachments().length > 0) {
-                <div class="attachment-list">
-                  @for (file of emailAttachments(); track file.name) {
-                    <span>{{ file.name }}</span>
-                  }
-                </div>
+              @if (emailPreview(); as preview) {
+                <section class="email-preview" aria-label="Resolved email preview">
+                  <div>
+                    <span>To</span>
+                    <strong>{{ preview.recipient }}</strong>
+                  </div>
+                  <div>
+                    <span>From</span>
+                    <strong>{{ preview.sender }}</strong>
+                  </div>
+                  <div>
+                    <span>Template</span>
+                    <strong>{{ preview.templateName }} v{{ preview.templateVersion }}</strong>
+                  </div>
+                  <div>
+                    <span>Subject</span>
+                    <strong>{{ preview.subject }}</strong>
+                  </div>
+                  <iframe class="preview-frame" title="Resolved email preview" sandbox="" [srcdoc]="preview.bodyHtml"></iframe>
+                </section>
               }
-              <button type="button" (click)="sendEmail()" [disabled]="loading() || !emailTo().trim()">Send email</button>
+              <button type="button" (click)="sendEmail()" [disabled]="!canSendSelectedLead()">Send email</button>
             </section>
             <section class="detail-section templates-panel">
-              <h3>Quick templates</h3>
+              <h3>Email templates</h3>
               <div class="template-list">
-                @for (template of templates(); track template) {
-                  <button type="button" class="template" (click)="useTemplate(template)">{{ template }}</button>
+                @for (template of emailTemplates(); track template.id) {
+                  <button type="button" class="template" (click)="selectEmailTemplate(template.id)">
+                    <strong>{{ template.name }}</strong>
+                    <span>{{ template.description }}</span>
+                    <em>{{ template.intendedUse }}</em>
+                  </button>
                 }
               </div>
             </section>

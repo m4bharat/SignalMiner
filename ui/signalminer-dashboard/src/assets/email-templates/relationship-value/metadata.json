@@ -1,0 +1,12 @@
+{
+  "id": "relationship-value",
+  "name": "Relationship Value",
+  "description": "Explains Zextri's relationship-signal value.",
+  "category": "Cold outreach",
+  "version": "1.0.0",
+  "intendedUse": "Use when the lead may care about follow-up quality and relationship context.",
+  "defaultSubject": "Relationship context for {{company}}",
+  "htmlPath": "assets/email-templates/relationship-value/template.html",
+  "supportedVariables": ["firstName", "fullName", "company", "senderName", "senderTitle", "websiteUrl", "demoUrl", "unsubscribeUrl"],
+  "requiredVariables": ["firstName", "company", "unsubscribeUrl"]
+}

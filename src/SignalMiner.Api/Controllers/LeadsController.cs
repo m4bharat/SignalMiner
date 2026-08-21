@@ -84,6 +84,9 @@ public sealed class LeadsController(
         [FromForm] string? replyTo,
         [FromForm] string? cc,
         [FromForm] string? bcc,
+        [FromForm] bool isTest,
+        [FromForm] string? templateId,
+        [FromForm] string? templateVersion,
         [FromForm] IReadOnlyList<IFormFile>? attachments,
         CancellationToken cancellationToken)
     {
@@ -97,7 +100,10 @@ public sealed class LeadsController(
                 replyTo,
                 cc,
                 bcc,
-                await ReadAttachmentsAsync(attachments, cancellationToken));
+                await ReadAttachmentsAsync(attachments, cancellationToken),
+                isTest,
+                templateId,
+                templateVersion);
             var lead = await manualEmail.SendAsync(id, request, cancellationToken);
             return lead is null ? NotFound() : Ok(LeadDto.From(lead));
         }

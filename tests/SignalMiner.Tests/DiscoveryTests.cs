@@ -430,7 +430,7 @@ public sealed class DiscoveryTests
         var updated = await service.SendAsync(
             lead.Id,
             new SendManualEmailRequest(
-                null,
+                "chris@dscturbo.com",
                 "Hello Chris",
                 "Manual note only.",
                 null,
@@ -448,6 +448,9 @@ public sealed class DiscoveryTests
         Assert.Equal(ContactStatus.Contacted, lead.ContactStatus);
         var evt = Assert.Single(lead.OutreachEvents);
         Assert.Equal(OutreachEventType.ManualEmailSent, evt.Type);
+        Assert.Contains("Sent time:", evt.Body);
+        Assert.Contains("Delivery status: Submitted", evt.Body);
+        Assert.Contains("Provider message ID: provider-message-1", evt.Body);
         Assert.Contains("Attachments: overview.pdf", evt.Body);
         Assert.Equal(ContactStatus.Contacted, evt.NewContactStatus);
         Assert.True(repository.WasSaved);
@@ -463,6 +466,153 @@ public sealed class DiscoveryTests
             service.SendAsync(lead.Id, new SendManualEmailRequest(null, "Hello", "Body", null, null, null, null, []), CancellationToken.None));
 
         Assert.Equal("Enter a valid recipient email address.", exception.Message);
+    }
+
+    [Fact]
+    public async Task ManualEmailService_RejectsRecipientThatDoesNotMatchSelectedLead()
+    {
+        var lead = new Lead
+        {
+            DisplayName = "Marc Garcia",
+            PublicEmail = "marc@kodiotech.com",
+            ContactStatus = ContactStatus.NotContacted
+        };
+        var repository = new SingleLeadRepository(lead);
+        var delivery = new RecordingEmailDeliveryService();
+        var service = new ManualEmailService(repository, delivery);
+
+        var exception = await Assert.ThrowsAsync<ManualEmailException>(() =>
+            service.SendAsync(
+                lead.Id,
+                new SendManualEmailRequest("other@example.com", "Hello", "Body", null, null, null, null, []),
+                CancellationToken.None));
+
+        Assert.Equal("Recipient email does not match the selected lead. Refresh the lead and try again.", exception.Message);
+        Assert.Empty(delivery.Messages);
+        Assert.Equal(ContactStatus.NotContacted, lead.ContactStatus);
+        Assert.False(repository.WasSaved);
+    }
+
+    [Fact]
+    public async Task ManualEmailService_DoesNotMarkContactedWhenDeliveryFails()
+    {
+        var lead = new Lead
+        {
+            DisplayName = "Vinicius Silva",
+            PublicEmail = "vinicius@zanvexis.com",
+            ContactStatus = ContactStatus.NotContacted
+        };
+        var repository = new SingleLeadRepository(lead);
+        var service = new ManualEmailService(repository, new FailingEmailDeliveryService());
+
+        var exception = await Assert.ThrowsAsync<ManualEmailException>(() =>
+            service.SendAsync(
+                lead.Id,
+                new SendManualEmailRequest("vinicius@zanvexis.com", "Hello", "Body", null, null, null, null, []),
+                CancellationToken.None));
+
+        Assert.Equal("Provider rejected the message.", exception.Message);
+        Assert.Equal(ContactStatus.NotContacted, lead.ContactStatus);
+        Assert.Empty(lead.OutreachEvents);
+        Assert.False(repository.WasSaved);
+    }
+
+    [Fact]
+    public async Task ManualEmailService_TestEmailUsesSenderInboxAndDoesNotMarkContacted()
+    {
+        var lead = new Lead
+        {
+            DisplayName = "Chris Lindolph",
+            PublicEmail = "chris@dscturbo.com",
+            ContactStatus = ContactStatus.NotContacted
+        };
+        var repository = new SingleLeadRepository(lead);
+        var delivery = new RecordingEmailDeliveryService();
+        var service = new ManualEmailService(repository, delivery);
+
+        await service.SendAsync(
+            lead.Id,
+            new SendManualEmailRequest("chris@dscturbo.com", "Preview", "Body", null, null, null, null, [], IsTest: true),
+            CancellationToken.None);
+
+        var message = Assert.Single(delivery.Messages);
+        Assert.Equal("hello@zextri.com", message.ToEmail);
+        Assert.Equal("Zextri Test Inbox", message.ToName);
+        Assert.Equal(ContactStatus.NotContacted, lead.ContactStatus);
+        var evt = Assert.Single(lead.OutreachEvents);
+        Assert.Equal(OutreachEventType.ManualEmailPrepared, evt.Type);
+        Assert.Contains("Test email: true", evt.Body);
+        Assert.Null(evt.NewContactStatus);
+        Assert.True(repository.WasSaved);
+    }
+
+    [Fact]
+    public void EmailTemplates_AllThreeTemplatesAreDiscoverableAndBranded()
+    {
+        var templateRoot = FindRepositoryFile("ui", "signalminer-dashboard", "src", "assets", "email-templates");
+        var manifestPath = Path.Combine(templateRoot, "manifest.json");
+
+        Assert.True(File.Exists(manifestPath));
+        var manifestJson = File.ReadAllText(manifestPath);
+        Assert.Contains("\"quick-introduction\"", manifestJson);
+        Assert.Contains("\"relationship-value\"", manifestJson);
+        Assert.Contains("\"demo-follow-up\"", manifestJson);
+
+        var templateFiles = Directory.GetFiles(templateRoot, "template.html", SearchOption.AllDirectories);
+        Assert.Equal(3, templateFiles.Length);
+        foreach (var templateFile in templateFiles)
+        {
+            var html = File.ReadAllText(templateFile);
+            Assert.Contains("{{sharedHeader}}", html);
+            Assert.Contains("{{sharedSignature}}", html);
+            Assert.Contains("{{sharedFooter}}", html);
+            Assert.DoesNotContain("Zextri Growth Team", html);
+        }
+    }
+
+    [Fact]
+    public void EmailTemplates_SharedPartsUseOfficialLogoAndWebsiteColors()
+    {
+        var templateRoot = FindRepositoryFile("ui", "signalminer-dashboard", "src", "assets", "email-templates");
+        var header = File.ReadAllText(Path.Combine(templateRoot, "shared", "email-header.html"));
+        var signature = File.ReadAllText(Path.Combine(templateRoot, "shared", "email-signature.html"));
+        var footer = File.ReadAllText(Path.Combine(templateRoot, "shared", "email-footer.html"));
+        var relationship = File.ReadAllText(Path.Combine(templateRoot, "relationship-value", "template.html"));
+
+        Assert.Contains("https://zextri.com/icons/zextri-192.png", header);
+        Assert.Contains("Zextri", header);
+        Assert.Contains("Bharat Bhushan", signature);
+        Assert.Contains("Founder, Zextri", signature);
+        Assert.Contains("#2563eb", footer + relationship);
+        Assert.Contains("#6D28D9", relationship);
+        Assert.Contains("{{unsubscribeUrl}}", footer);
+        Assert.DoesNotContain("Zextri Growth Team", header + signature + footer + relationship);
+    }
+
+    [Fact]
+    public void EmailTemplates_AreIncludedInAngularBuildAssets()
+    {
+        var angularJsonPath = FindRepositoryFile("ui", "signalminer-dashboard", "angular.json");
+        var angularJson = File.ReadAllText(angularJsonPath);
+
+        Assert.Contains("\"assets\": [\"src/assets\"]", angularJson);
+    }
+
+    private static string FindRepositoryFile(params string[] segments)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(new[] { directory.FullName }.Concat(segments).ToArray());
+            if (File.Exists(candidate) || Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException($"Could not find {Path.Combine(segments)}.");
     }
 
     private sealed class RecordingDiscoveryService(params Lead[] leads) : IGitHubDiscoveryService, IXDiscoveryService
@@ -565,11 +715,17 @@ public sealed class DiscoveryTests
     {
         public List<EmailMessage> Messages { get; } = [];
 
-        public Task SendAsync(EmailMessage message, CancellationToken cancellationToken)
+        public Task<EmailDeliveryResult> SendAsync(EmailMessage message, CancellationToken cancellationToken)
         {
             Messages.Add(message);
-            return Task.CompletedTask;
+            return Task.FromResult(new EmailDeliveryResult("Submitted", "provider-message-1", DateTimeOffset.Parse("2026-08-21T00:00:00Z")));
         }
+    }
+
+    private sealed class FailingEmailDeliveryService : IEmailDeliveryService
+    {
+        public Task<EmailDeliveryResult> SendAsync(EmailMessage message, CancellationToken cancellationToken) =>
+            throw new ManualEmailException("Provider rejected the message.", 502);
     }
 
     private sealed class StubHttpMessageHandler(Func<Uri, HttpResponseMessage> responder) : HttpMessageHandler
