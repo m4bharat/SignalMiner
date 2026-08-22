@@ -770,7 +770,7 @@ export class AppComponent {
   }
 
   private defaultEmailCopy(): string {
-    return DEFAULT_EMAIL_TEMPLATE.body;
+    return DEFAULT_EMAIL_TEMPLATE.html;
   }
 
   private resolveVariables(value: string, lead: Lead, forHtml = true): string {
@@ -783,6 +783,10 @@ export class AppComponent {
       senderTitle: ZEXTRI_EMAIL_CONFIG.senderTitle,
       websiteUrl: ZEXTRI_EMAIL_CONFIG.websiteUrl,
       demoUrl: ZEXTRI_EMAIL_CONFIG.demoUrl,
+      relationshipDemoUrl: ZEXTRI_EMAIL_CONFIG.relationshipDemoUrl,
+      followUpDemoUrl: ZEXTRI_EMAIL_CONFIG.followUpDemoUrl,
+      chromeUrl: ZEXTRI_EMAIL_CONFIG.chromeUrl,
+      edgeUrl: ZEXTRI_EMAIL_CONFIG.edgeUrl,
       unsubscribeUrl: ZEXTRI_EMAIL_CONFIG.unsubscribeUrl,
       businessInfo: ZEXTRI_EMAIL_CONFIG.businessInfo
     };
@@ -836,6 +840,10 @@ export class AppComponent {
       senderTitle: ZEXTRI_EMAIL_CONFIG.senderTitle,
       websiteUrl: ZEXTRI_EMAIL_CONFIG.websiteUrl,
       demoUrl: ZEXTRI_EMAIL_CONFIG.demoUrl,
+      relationshipDemoUrl: ZEXTRI_EMAIL_CONFIG.relationshipDemoUrl,
+      followUpDemoUrl: ZEXTRI_EMAIL_CONFIG.followUpDemoUrl,
+      chromeUrl: ZEXTRI_EMAIL_CONFIG.chromeUrl,
+      edgeUrl: ZEXTRI_EMAIL_CONFIG.edgeUrl,
       unsubscribeUrl: ZEXTRI_EMAIL_CONFIG.unsubscribeUrl,
       businessInfo: ZEXTRI_EMAIL_CONFIG.businessInfo
     };
@@ -967,7 +975,6 @@ export class AppComponent {
   private withComplianceFooter(bodyHtml: string): string {
     const footer = [
       '<div data-signalminer-compliance="true" style="margin-top:18px;padding-top:10px;border-top:1px solid #e5e7eb;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:16px;color:#6b7280;">',
-      `<div>${ZEXTRI_EMAIL_CONFIG.businessInfo}</div>`,
       `<div><a href="${ZEXTRI_EMAIL_CONFIG.unsubscribeUrl}" style="color:#0f766e;text-decoration:none;">Unsubscribe</a> from future outreach.</div>`,
       '</div>'
     ].join('');

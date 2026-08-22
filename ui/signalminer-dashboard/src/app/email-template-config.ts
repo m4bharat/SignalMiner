@@ -7,7 +7,11 @@ export const ZEXTRI_EMAIL_CONFIG = {
   businessInfo: 'Zextri, hello@zextri.com, https://zextri.com',
   unsubscribeUrl: 'https://zextri.com/unsubscribe',
   websiteUrl: 'https://zextri.com',
-  demoUrl: 'https://zextri.com/#/',
+  demoUrl: 'https://www.youtube.com/watch?v=Zo66nD5CMsc',
+  relationshipDemoUrl: 'https://www.youtube.com/watch?v=v_bxGZnQU5o',
+  followUpDemoUrl: 'https://www.youtube.com/watch?v=LOfbyaqfk3w',
+  chromeUrl: 'https://chromewebstore.google.com/detail/zextri/jnfghdnpnebjlokdgfdfioncdpbmdiba',
+  edgeUrl: 'https://microsoftedge.microsoft.com/addons/detail/zextri/lopeokgklkpknnflmmgkaefnmphjielc',
   templateManifestUrl: 'assets/email-templates/manifest.json'
 } as const;
 
@@ -48,7 +52,30 @@ export const DEFAULT_EMAIL_TEMPLATE = {
     'Zextri helps teams identify relationships that need attention and write timely, context-aware follow-ups across LinkedIn and X.',
     '',
     "Would you be open to a quick look? I'd be happy to send a short demo."
-  ].join('\n')
+  ].join('\n'),
+  html: [
+    '<p style="margin:0 0 16px;font-size:15px;line-height:24px;color:#111827;">Hi {{firstName}},</p>',
+    '<p style="margin:0 0 16px;font-size:15px;line-height:24px;color:#334155;">I came across your work at {{company}} and thought Zextri could be useful for your growth workflow.</p>',
+    '<p style="margin:0 0 18px;font-size:15px;line-height:24px;color:#334155;">Zextri helps teams identify relationships that need attention and write timely, context-aware follow-ups across LinkedIn and X.</p>',
+    '<p style="margin:0 0 22px;font-size:15px;line-height:24px;color:#334155;">Would you be open to a quick look?</p>',
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border-collapse:collapse;">',
+    '<tr>',
+    '<td style="padding:0;font-family:Inter,Arial,Helvetica,sans-serif;">',
+    '<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 10px;">',
+    '<tr><td bgcolor="#07070a" style="border-radius:10px;"><a href="{{demoUrl}}" style="display:inline-block;padding:12px 18px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:18px;font-weight:800;color:#ffffff;text-decoration:none;">Watch Demo</a></td></tr>',
+    '</table>',
+    '<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">',
+    '<tr>',
+    '<td bgcolor="#f8fafc" style="border:1px solid #dbe3ea;border-radius:8px;"><a href="{{chromeUrl}}" style="display:inline-block;padding:8px 11px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:16px;font-weight:700;color:#0f172a;text-decoration:none;">Add to Chrome</a></td>',
+    '<td style="width:8px;font-size:8px;line-height:8px;">&nbsp;</td>',
+    '<td bgcolor="#f8fafc" style="border:1px solid #dbe3ea;border-radius:8px;"><a href="{{edgeUrl}}" style="display:inline-block;padding:8px 11px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:16px;font-weight:700;color:#0f172a;text-decoration:none;">Get for Edge</a></td>',
+    '</tr>',
+    '</table>',
+    '<div style="margin-top:10px;font-size:12px;line-height:18px;color:#64748b;">Available on the official Chrome and Microsoft Edge stores.</div>',
+    '</td>',
+    '</tr>',
+    '</table>'
+  ].join('')
 } as const;
 
 export const FALLBACK_ZEXTRI_SIGNATURE_HTML = [
@@ -63,7 +90,7 @@ export const FALLBACK_ZEXTRI_SIGNATURE_HTML = [
   '<div style="font-size:15px;line-height:21px;font-weight:700;color:#111827;margin:0;">Bharat Bhushan</div>',
   '<div style="font-size:13px;line-height:19px;color:#4b5563;margin:2px 0 8px;">Founder, Zextri</div>',
   '<div style="font-size:13px;line-height:19px;color:#374151;margin:0;">',
-  '<a href="https://zextri.com" style="color:#0f766e;text-decoration:none;font-weight:700;">zextri.com</a>',
+  '<a href="https://zextri.com" style="color:#0f766e;text-decoration:none;font-weight:700;">Visit Zextri</a>',
   '</div>',
   '</td>',
   '</tr>',

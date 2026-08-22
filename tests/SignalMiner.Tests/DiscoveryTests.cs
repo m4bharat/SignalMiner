@@ -566,6 +566,10 @@ public sealed class DiscoveryTests
             Assert.Contains("{{sharedHeader}}", html);
             Assert.Contains("{{sharedSignature}}", html);
             Assert.Contains("{{sharedFooter}}", html);
+            Assert.Contains("Watch Demo", html);
+            Assert.Contains("Add to Chrome", html);
+            Assert.Contains("Get for Edge", html);
+            Assert.Contains("Available on the official Chrome and Microsoft Edge stores.", html);
             Assert.DoesNotContain("Zextri Growth Team", html);
         }
     }
@@ -586,6 +590,10 @@ public sealed class DiscoveryTests
         Assert.Contains("#2563eb", footer + relationship);
         Assert.Contains("#6D28D9", relationship);
         Assert.Contains("{{unsubscribeUrl}}", footer);
+        Assert.Contains("Visit Zextri", signature);
+        Assert.DoesNotContain("{{businessInfo}}", footer);
+        Assert.DoesNotContain("{{websiteUrl}}", footer);
+        Assert.DoesNotContain("zextri.com", footer + signature);
         Assert.DoesNotContain("Zextri Growth Team", header + signature + footer + relationship);
     }
 

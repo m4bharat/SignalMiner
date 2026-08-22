@@ -8,8 +8,8 @@
     "intendedUse": "Use for a first touch with a relevant lead.",
     "defaultSubject": "A quick idea for {{company}}",
     "htmlPath": "assets/email-templates/quick-introduction/template.html",
-    "supportedVariables": ["firstName", "fullName", "company", "senderName", "senderTitle", "websiteUrl", "demoUrl", "unsubscribeUrl"],
-    "requiredVariables": ["firstName", "company", "unsubscribeUrl"]
+    "supportedVariables": ["firstName", "fullName", "company", "senderName", "senderTitle", "websiteUrl", "demoUrl", "relationshipDemoUrl", "followUpDemoUrl", "chromeUrl", "edgeUrl", "unsubscribeUrl"],
+    "requiredVariables": ["firstName", "company", "chromeUrl", "edgeUrl", "unsubscribeUrl"]
   },
   {
     "id": "relationship-value",
@@ -20,8 +20,8 @@
     "intendedUse": "Use when the lead may care about follow-up quality and relationship context.",
     "defaultSubject": "Relationship context for {{company}}",
     "htmlPath": "assets/email-templates/relationship-value/template.html",
-    "supportedVariables": ["firstName", "fullName", "company", "senderName", "senderTitle", "websiteUrl", "demoUrl", "unsubscribeUrl"],
-    "requiredVariables": ["firstName", "company", "unsubscribeUrl"]
+    "supportedVariables": ["firstName", "fullName", "company", "senderName", "senderTitle", "websiteUrl", "demoUrl", "relationshipDemoUrl", "followUpDemoUrl", "chromeUrl", "edgeUrl", "unsubscribeUrl"],
+    "requiredVariables": ["firstName", "company", "chromeUrl", "edgeUrl", "unsubscribeUrl"]
   },
   {
     "id": "demo-follow-up",
@@ -32,7 +32,7 @@
     "intendedUse": "Use after a conversation, demo, or prior interest.",
     "defaultSubject": "Zextri demo for {{company}}",
     "htmlPath": "assets/email-templates/demo-follow-up/template.html",
-    "supportedVariables": ["firstName", "fullName", "company", "senderName", "senderTitle", "websiteUrl", "demoUrl", "unsubscribeUrl"],
-    "requiredVariables": ["firstName", "company", "demoUrl", "unsubscribeUrl"]
+    "supportedVariables": ["firstName", "fullName", "company", "senderName", "senderTitle", "websiteUrl", "demoUrl", "relationshipDemoUrl", "followUpDemoUrl", "chromeUrl", "edgeUrl", "unsubscribeUrl"],
+    "requiredVariables": ["firstName", "company", "chromeUrl", "edgeUrl", "unsubscribeUrl"]
   }
 ]

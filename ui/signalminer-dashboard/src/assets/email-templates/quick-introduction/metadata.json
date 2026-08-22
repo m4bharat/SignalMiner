@@ -7,6 +7,6 @@
   "intendedUse": "Use for a first touch with a relevant lead.",
   "defaultSubject": "A quick idea for {{company}}",
   "htmlPath": "assets/email-templates/quick-introduction/template.html",
-  "supportedVariables": ["firstName", "fullName", "company", "senderName", "senderTitle", "websiteUrl", "demoUrl", "unsubscribeUrl"],
-  "requiredVariables": ["firstName", "company", "unsubscribeUrl"]
+  "supportedVariables": ["firstName", "fullName", "company", "senderName", "senderTitle", "websiteUrl", "demoUrl", "relationshipDemoUrl", "followUpDemoUrl", "chromeUrl", "edgeUrl", "unsubscribeUrl"],
+  "requiredVariables": ["firstName", "company", "chromeUrl", "edgeUrl", "unsubscribeUrl"]
 }
