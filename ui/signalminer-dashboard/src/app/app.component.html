@@ -53,6 +53,40 @@
         <button type="button" class="secondary" (click)="clearFilters()" [disabled]="loading()">Clear</button>
       </div>
       <div class="import-panel">
+        <strong>Add contact</strong>
+        <div class="manual-contact-form">
+          <input
+            [ngModel]="manualContact().name"
+            (ngModelChange)="updateManualContact('name', $event)"
+            placeholder="Full name">
+          <input
+            type="email"
+            [ngModel]="manualContact().email"
+            (ngModelChange)="updateManualContact('email', $event)"
+            placeholder="Email">
+          <input
+            [ngModel]="manualContact().title"
+            (ngModelChange)="updateManualContact('title', $event)"
+            placeholder="Title">
+          <input
+            [ngModel]="manualContact().company"
+            (ngModelChange)="updateManualContact('company', $event)"
+            placeholder="Company">
+          <input
+            [ngModel]="manualContact().companyDomain"
+            (ngModelChange)="updateManualContact('companyDomain', $event)"
+            placeholder="Company domain">
+          <input
+            [ngModel]="manualContact().linkedInUrl"
+            (ngModelChange)="updateManualContact('linkedInUrl', $event)"
+            placeholder="LinkedIn URL">
+          <textarea
+            [ngModel]="manualContact().note"
+            (ngModelChange)="updateManualContact('note', $event)"
+            rows="3"
+            placeholder="Note"></textarea>
+          <button type="button" (click)="addManualContact()" [disabled]="loading() || !canAddManualContact()">Add contact</button>
+        </div>
         <strong>Import contacts</strong>
         <input type="file" accept=".csv,.xlsx" (change)="selectImportFile($event)">
         <div class="import-actions">
@@ -248,20 +282,33 @@
             <div class="email-log-card">
               <div class="email-log-header">
                 <strong>{{ emailStrings.ui.labels.emailHistory }}</strong>
+                <span class="email-log-header-meta">
+                  <span>{{ (lead.emailLogs || []).length }}</span>
+                </span>
               </div>
               @if ((lead.emailLogs || []).length > 0) {
                 <div class="email-log-list">
-                  @for (entry of lead.emailLogs || []; track entry.occurredAt + entry.kind + entry.log) {
+                  @for (entry of lead.emailLogs || []; track entry.occurredAt + entry.kind + entry.log; let index = $index) {
                     <article class="email-log-entry">
-                      <div class="email-log-entry-header">
-                        <strong>{{ entry.kind }}</strong>
+                      <button
+                        type="button"
+                        class="email-log-entry-header"
+                        [attr.aria-expanded]="isEmailLogExpanded(entry, index)"
+                        [attr.aria-label]="isEmailLogExpanded(entry, index) ? emailStrings.ui.labels.collapseEmailLog : emailStrings.ui.labels.expandEmailLog"
+                        (click)="toggleEmailLog(entry, index)">
+                        <span class="email-log-entry-title">
+                          <strong>{{ entry.template || emailStrings.ui.labels.templateNotRecorded }}</strong>
+                          <span>{{ entry.kind }}</span>
+                        </span>
                         <span>
                           {{ entry.isTest ? emailStrings.ui.labels.preparedAt : emailStrings.ui.labels.sentAt }}
                           {{ formatContactedAt(entry.occurredAt) }}
+                          <span class="email-log-chevron" [class.expanded]="isEmailLogExpanded(entry, index)">v</span>
                         </span>
-                      </div>
-                      <span class="email-log-template">{{ entry.template || emailStrings.ui.labels.templateNotRecorded }}</span>
-                      <pre>{{ entry.log }}</pre>
+                      </button>
+                      @if (isEmailLogExpanded(entry, index)) {
+                        <pre>{{ entry.log }}</pre>
+                      }
                     </article>
                   }
                 </div>

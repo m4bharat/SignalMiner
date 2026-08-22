@@ -22,6 +22,7 @@ export const EmailStrings = {
   },
   templates: {
     shared: {
+      companyFallback: 'your organization',
       greeting: 'Hi',
       ctaWatchDemo: 'Watch Demo',
       ctaChrome: 'Add to Chrome',
@@ -78,6 +79,8 @@ export const EmailStrings = {
       tabEmail: 'Email',
       leadEmail: 'Email',
       emailHistory: 'Email history',
+      expandEmailLog: 'Expand email log',
+      collapseEmailLog: 'Collapse email log',
       sentAt: 'Sent at',
       preparedAt: 'Prepared at',
       templateNotRecorded: 'Template not recorded',
@@ -164,12 +167,13 @@ export const EmailStrings = {
       requiredVariablesBody: 'Required template variables are missing or unresolved.',
       emailSentTitle: 'Email sent',
       emailFailedTitle: 'Email failed',
-      emailFailedBody: 'Email could not be sent. Check SMTP settings and try again.'
+      emailFailedBody: 'Email could not be sent. Check SMTP settings and try again.',
+      contactAddedTitle: 'Contact added',
+      contactNotAddedTitle: 'Contact not added'
     },
     warnings: {
       noLead: 'No lead is selected.',
       missingGreeting: 'Greeting may be missing because the lead name is blank.',
-      missingCompany: 'Company name is missing for this lead.',
       missingRecipient: 'Recipient email is missing for this lead.',
       recipientMismatch: 'Recipient email does not match the selected lead.',
       missingRequiredVariablePrefix: 'Required template variable is missing:',

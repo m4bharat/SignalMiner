@@ -121,6 +121,16 @@ interface LeadImportPreviewRow {
   duplicateReason?: string;
 }
 
+interface ManualContactForm {
+  name: string;
+  email: string;
+  title: string;
+  company: string;
+  companyDomain: string;
+  linkedInUrl: string;
+  note: string;
+}
+
 interface ToastMessage {
   kind: ToastKind;
   title: string;
@@ -176,8 +186,18 @@ export class AppComponent {
   protected readonly selectedEmailTemplateName = signal('');
   protected readonly importFile = signal<File | null>(null);
   protected readonly importResult = signal<LeadImportResult | null>(null);
+  protected readonly manualContact = signal<ManualContactForm>({
+    name: '',
+    email: '',
+    title: '',
+    company: '',
+    companyDomain: '',
+    linkedInUrl: '',
+    note: ''
+  });
   protected readonly detailTab = signal<DetailTab>('overview');
   protected readonly detailExpanded = signal(true);
+  protected readonly expandedEmailLogKeys = signal<ReadonlySet<string>>(new Set<string>());
   protected readonly toast = signal<ToastMessage | null>(null);
 
   protected readonly totalPages = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize())));
@@ -275,6 +295,26 @@ export class AppComponent {
     this.uploadImport(true);
   }
 
+  protected canAddManualContact(): boolean {
+    const contact = this.manualContact();
+    return contact.name.trim().length > 0 &&
+      (contact.email.trim().length > 0 || contact.linkedInUrl.trim().length > 0);
+  }
+
+  protected updateManualContact(field: keyof ManualContactForm, value: string): void {
+    this.manualContact.update(contact => ({ ...contact, [field]: value }));
+  }
+
+  protected addManualContact(): void {
+    if (!this.canAddManualContact()) {
+      this.message.set('Enter a contact name and either an email or LinkedIn URL.');
+      return;
+    }
+
+    const file = this.buildManualContactFile(this.manualContact());
+    this.submitImport(file, true, 'manual');
+  }
+
   protected primarySource(lead: Lead): { label: string; url?: string } {
     if (lead.gitHubUrl) return { label: 'GitHub', url: lead.gitHubUrl };
     if (lead.xUrl) return { label: 'X', url: lead.xUrl };
@@ -293,6 +333,28 @@ export class AppComponent {
 
   protected toggleDetailExpanded(): void {
     this.detailExpanded.update(value => !value);
+  }
+
+  protected emailLogKey(entry: LeadEmailLog, index: number): string {
+    return `${entry.occurredAt}|${entry.kind}|${entry.template ?? ''}|${entry.log.length}|${index}`;
+  }
+
+  protected isEmailLogExpanded(entry: LeadEmailLog, index: number): boolean {
+    return this.expandedEmailLogKeys().has(this.emailLogKey(entry, index));
+  }
+
+  protected toggleEmailLog(entry: LeadEmailLog, index: number): void {
+    const key = this.emailLogKey(entry, index);
+    this.expandedEmailLogKeys.update(keys => {
+      const next = new Set(keys);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+
+      return next;
+    });
   }
 
   protected nextPage(): void {
@@ -342,6 +404,7 @@ export class AppComponent {
     this.selectedLead.set(lead);
     this.activeEmailLeadId.set(lead.id);
     this.detailTab.set('overview');
+    this.expandedEmailLogKeys.set(new Set<string>());
     this.outreachNote.set('');
     this.emailTo.set(lead.publicEmail ?? '');
     this.emailReplyTo.set(ZEXTRI_EMAIL_CONFIG.senderEmail);
@@ -840,7 +903,7 @@ export class AppComponent {
   }
 
   private resolveVariables(value: string, lead: Lead, forHtml = true): string {
-    const company = lead.company?.name?.trim() || '';
+    const company = this.companyNameOrFallback(lead);
     const variables: Record<string, string> = {
       brandName: EmailStrings.brand.name,
       logoAlt: EmailStrings.brand.logoAlt,
@@ -899,14 +962,12 @@ export class AppComponent {
 
     const warnings: string[] = [];
     const firstName = this.firstName(lead);
-    const company = lead.company?.name?.trim();
     const bodyText = this.normalizeText(this.htmlToText(this.finalEmailBodyHtml()));
     const subjectText = this.normalizeText(this.resolveVariables(this.emailSubject(), lead, false));
     const missingRequiredVariables = this.getMissingRequiredVariables(lead);
     const unresolvedVariables = this.findUnresolvedVariables(`${subjectText} ${bodyText}`);
 
     if (!firstName) warnings.push(EmailStrings.ui.warnings.missingGreeting);
-    if (!company) warnings.push(EmailStrings.ui.warnings.missingCompany);
     if (!lead.publicEmail) warnings.push(EmailStrings.ui.warnings.missingRecipient);
     for (const variable of missingRequiredVariables) {
       warnings.push(`${EmailStrings.ui.warnings.missingRequiredVariablePrefix} {{${variable}}}.`);
@@ -930,7 +991,7 @@ export class AppComponent {
     const values: Record<string, string> = {
       firstName: this.firstName(lead),
       fullName: lead.displayName.trim(),
-      company: lead.company?.name?.trim() || '',
+      company: this.companyNameOrFallback(lead),
       senderName: ZEXTRI_EMAIL_CONFIG.senderName,
       senderTitle: ZEXTRI_EMAIL_CONFIG.senderTitle,
       websiteUrl: ZEXTRI_EMAIL_CONFIG.websiteUrl,
@@ -979,6 +1040,10 @@ export class AppComponent {
 
   private firstName(lead: Lead): string {
     return lead.displayName.trim().split(/\s+/)[0] ?? '';
+  }
+
+  private companyNameOrFallback(lead: Lead): string {
+    return lead.company?.name?.trim() || EmailStrings.templates.shared.companyFallback;
   }
 
   private isValidEmail(value: string): boolean {
@@ -1371,6 +1436,10 @@ export class AppComponent {
       return;
     }
 
+    this.submitImport(file, commit, 'file');
+  }
+
+  private submitImport(file: File, commit: boolean, source: 'file' | 'manual'): void {
     this.loading.set(true);
     const form = new FormData();
     form.append('file', file);
@@ -1379,12 +1448,20 @@ export class AppComponent {
     this.http.post<LeadImportResult>(`${this.apiBase}/leads/import`, form).subscribe({
       next: result => {
         this.importResult.set(result);
-        this.message.set(commit
-          ? `Imported ${result.importedRows} leads; skipped ${result.skippedRows}.`
-          : `Previewed ${result.validRows} valid rows from ${result.totalRows}.`);
+        const message = this.importMessage(result, commit, source);
+        this.message.set(message);
+        if (source === 'manual' && commit) {
+          this.showToast(
+            result.importedRows > 0 ? 'success' : 'error',
+            result.importedRows > 0 ? EmailStrings.ui.toasts.contactAddedTitle : EmailStrings.ui.toasts.contactNotAddedTitle,
+            this.manualContactToastMessage(result, message));
+        }
         this.loading.set(false);
         if (commit) {
           this.sourceFilter.set('Imported');
+          if (source === 'manual' && result.importedRows > 0) {
+            this.resetManualContact();
+          }
           this.search();
         }
       },
@@ -1393,5 +1470,83 @@ export class AppComponent {
         this.loading.set(false);
       }
     });
+  }
+
+  private importMessage(result: LeadImportResult, commit: boolean, source: 'file' | 'manual'): string {
+    if (!commit) {
+      return `Previewed ${result.validRows} valid rows from ${result.totalRows}.`;
+    }
+
+    if (source === 'manual') {
+      return result.importedRows > 0
+        ? 'Contact added manually.'
+        : `Contact was not added; skipped ${result.skippedRows}.`;
+    }
+
+    return `Imported ${result.importedRows} leads; skipped ${result.skippedRows}.`;
+  }
+
+  private manualContactToastMessage(result: LeadImportResult, fallback: string): string {
+    const duplicateReason = result.previewRows
+      .map(row => row.duplicateReason?.trim())
+      .find(Boolean);
+    if (duplicateReason) {
+      return duplicateReason;
+    }
+
+    const issue = result.issues[0];
+    if (issue) {
+      return `${issue.field}: ${issue.message}`;
+    }
+
+    return fallback;
+  }
+
+  private resetManualContact(): void {
+    this.manualContact.set({
+      name: '',
+      email: '',
+      title: '',
+      company: '',
+      companyDomain: '',
+      linkedInUrl: '',
+      note: ''
+    });
+  }
+
+  private buildManualContactFile(contact: ManualContactForm): File {
+    const headers = [
+      'First Name',
+      'Last Name',
+      'Professional Email',
+      'Title',
+      'Company',
+      'Company Domain',
+      'LinkedIn Profile',
+      'Verification Note',
+      'Outreach Status',
+      'Zextri Fit Score'
+    ];
+    const note = ['Manually added from dashboard.', contact.note.trim()]
+      .filter(Boolean)
+      .join(' ');
+    const row = [
+      contact.name.trim(),
+      '',
+      contact.email.trim(),
+      contact.title.trim(),
+      contact.company.trim(),
+      contact.companyDomain.trim(),
+      contact.linkedInUrl.trim(),
+      note,
+      'NotContacted',
+      '50'
+    ];
+    const csv = `${headers.map(this.csvCell).join(',')}\r\n${row.map(this.csvCell).join(',')}\r\n`;
+    return new File([csv], 'manual-contact.csv', { type: 'text/csv' });
+  }
+
+  private csvCell(value: string): string {
+    return `"${value.replace(/"/g, '""')}"`;
   }
 }

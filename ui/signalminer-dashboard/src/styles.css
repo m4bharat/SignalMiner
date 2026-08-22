@@ -153,6 +153,17 @@ label {
   font-size: 0.86rem;
 }
 
+.manual-contact-form {
+  display: grid;
+  gap: 0.45rem;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px solid #dfe5dc;
+}
+
+.manual-contact-form textarea {
+  resize: vertical;
+}
+
 .import-actions,
 .import-summary {
   display: grid;
@@ -473,11 +484,31 @@ dd {
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
+  width: 100%;
 }
 
 .email-log-header strong {
   color: #1e2a2f;
   font-size: 0.92rem;
+}
+
+.email-log-header-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #667175;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.email-log-chevron {
+  display: inline-block;
+  color: #174d4d;
+  transition: transform 0.15s ease;
+}
+
+.email-log-chevron.expanded {
+  transform: rotate(180deg);
 }
 
 .email-log-entry-header span,
@@ -510,11 +541,33 @@ dd {
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
 }
 
 .email-log-entry-header strong {
   color: #1e2a2f;
   font-size: 0.86rem;
+}
+
+.email-log-entry-title {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.email-log-entry-title strong {
+  overflow-wrap: anywhere;
+}
+
+.email-log-entry-title span {
+  color: #667175;
+  font-size: 0.78rem;
+  line-height: 1.3;
 }
 
 .email-log-template {
