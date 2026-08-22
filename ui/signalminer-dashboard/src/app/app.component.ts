@@ -2,6 +2,17 @@ import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http'
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
+import {
+  buildSendEmailConfirmation,
+  buildTestEmailConfirmation,
+  CUSTOM_SIGNATURE_WRAPPER,
+  DEFAULT_EMAIL_TEMPLATE,
+  EMAIL_TEMPLATE_ASSET_PATHS,
+  FALLBACK_ZEXTRI_SIGNATURE_HTML,
+  LEGACY_ZEXTRI_SIGNATURE_MARKERS,
+  SIGNATURE_TEXT_MARKERS,
+  ZEXTRI_EMAIL_CONFIG
+} from './email-template-config';
 
 type ContactStatus = 'NotContacted' | 'ReadyForManualOutreach' | 'Contacted' | 'Replied' | 'NotInterested' | 'DoNotContact';
 type LeadStatus = 'New' | 'Enriched' | 'NeedsManualReview' | 'Qualified' | 'Disqualified' | 'Archived';
@@ -10,37 +21,6 @@ type SourceKind = 'GitHub' | 'Website' | 'X' | 'LinkedInProfileUrlOnly' | 'Manua
 type SourceFilter = '' | 'Imported' | SourceKind;
 type DetailTab = 'overview' | 'outreach' | 'email';
 type ToastKind = 'success' | 'error' | 'info';
-
-const ZEXTRI_LOGO_URL = 'https://zextri.com/icons/zextri-192.png';
-const SENDER_EMAIL = 'hello@zextri.com';
-const SENDER_NAME = 'Bharat from Zextri';
-const BUSINESS_INFO = 'Zextri, hello@zextri.com, https://zextri.com';
-const UNSUBSCRIBE_URL = 'https://zextri.com/unsubscribe';
-const WEBSITE_URL = 'https://zextri.com';
-const DEMO_URL = 'https://zextri.com/#/';
-const EMAIL_TEMPLATE_MANIFEST_URL = 'assets/email-templates/manifest.json';
-const ZEXTRI_EMAIL_SIGNATURE_TEXT = [
-  'Warm regards,',
-  'Bharat Bhushan',
-  'Founder, Zextri',
-  'Website: https://zextri.com'
-].join('\n');
-
-const LEGACY_EMAIL_SIGNATURE = [
-  'Best regards,',
-  'Zextri Team',
-  'https://zextri.com'
-].join('\n');
-
-const SIGNATURE_TEXT_MARKERS = [
-  'best regards',
-  'warm regards',
-  'bharat bhushan',
-  'zextri growth team',
-  'zextri team',
-  'website: https://zextri.com',
-  'zextri.com'
-];
 
 interface EmailPreview {
   recipient: string;
@@ -349,7 +329,7 @@ export class AppComponent {
     this.detailTab.set('overview');
     this.outreachNote.set('');
     this.emailTo.set(lead.publicEmail ?? '');
-    this.emailReplyTo.set(SENDER_EMAIL);
+    this.emailReplyTo.set(ZEXTRI_EMAIL_CONFIG.senderEmail);
     this.emailAttachments.set([]);
     this.emailPreview.set(null);
     this.draftDirty.set(false);
@@ -358,10 +338,10 @@ export class AppComponent {
     if (templateId) {
       this.applyEmailTemplate(templateId, false);
     } else {
-      this.emailSubject.set('A quick idea for {{company}}');
+      this.emailSubject.set(DEFAULT_EMAIL_TEMPLATE.subject);
       this.emailBodyHtml.set(this.composeEmailTemplateHtml(this.defaultEmailCopy()));
-      this.selectedEmailTemplateName.set('Quick Introduction');
-      this.selectedEmailTemplateVersion.set('1.0.0');
+      this.selectedEmailTemplateName.set(DEFAULT_EMAIL_TEMPLATE.name);
+      this.selectedEmailTemplateVersion.set(DEFAULT_EMAIL_TEMPLATE.version);
     }
   }
 
@@ -478,14 +458,13 @@ export class AppComponent {
     const firstName = this.firstName(lead);
     const company = lead.company?.name?.trim();
     const opening = firstName && company
-      ? `Hi {{firstName}},\n\nI came across your work at {{company}} and thought Zextri could be useful for your growth workflow.`
-      : `Hi ${firstName || 'there'},\n\nI thought Zextri could be useful for your growth workflow.`;
+      ? DEFAULT_EMAIL_TEMPLATE.body.split('\n\n').slice(0, 2).join('\n\n')
+      : DEFAULT_EMAIL_TEMPLATE.fallbackOpening.replace('there', firstName || 'there');
     const paragraphs = this.htmlToText(this.removeSignature(this.emailBodyHtml()))
       .split(/\n{2,}/)
       .map(part => part.trim())
       .filter(Boolean);
-    const rest = paragraphs.slice(2).join('\n\n') ||
-      'Zextri helps teams identify relationships that need attention and write timely, context-aware follow-ups across LinkedIn and X.\n\nWould you be open to a quick look? I\'d be happy to send a short demo.';
+    const rest = paragraphs.slice(2).join('\n\n') || DEFAULT_EMAIL_TEMPLATE.fallbackBodyRest;
 
     this.emailBodyHtml.set(this.withDefaultSignature(this.textToHtml(`${opening}\n\n${rest}`)));
     this.markDraftDirty();
@@ -499,9 +478,15 @@ export class AppComponent {
     }
 
     this.emailPreview.set(preview);
-    const confirmed = window.confirm(
-      `Send test email?\n\nLead: ${this.selectedLead()?.displayName ?? 'Selected lead'}\nTo: ${preview.recipient}\nFrom: ${preview.sender}\nTemplate: ${preview.templateName} v${preview.templateVersion}\nSubject: ${preview.subject}\n\n${preview.bodyText}`
-    );
+    const confirmed = window.confirm(buildTestEmailConfirmation({
+      leadName: this.selectedLead()?.displayName ?? 'Selected lead',
+      recipient: preview.recipient,
+      sender: preview.sender,
+      templateName: preview.templateName,
+      templateVersion: preview.templateVersion,
+      subject: preview.subject,
+      bodyText: preview.bodyText
+    }));
     if (!confirmed) {
       return;
     }
@@ -516,9 +501,15 @@ export class AppComponent {
     }
 
     this.emailPreview.set(preview);
-    const confirmed = window.confirm(
-      `Send email?\n\nLead: ${this.leadSummary(this.selectedLead())}\nTo: ${preview.recipient}\nFrom: ${preview.sender}\nTemplate: ${preview.templateName} v${preview.templateVersion}\nSubject: ${preview.subject}\n\n${preview.bodyText}`
-    );
+    const confirmed = window.confirm(buildSendEmailConfirmation({
+      leadSummary: this.leadSummary(this.selectedLead()),
+      recipient: preview.recipient,
+      sender: preview.sender,
+      templateName: preview.templateName,
+      templateVersion: preview.templateVersion,
+      subject: preview.subject,
+      bodyText: preview.bodyText
+    }));
     if (!confirmed) {
       return;
     }
@@ -539,7 +530,7 @@ export class AppComponent {
     form.append('subject', preview.subject);
     form.append('body', preview.bodyText);
     form.append('bodyHtml', preview.bodyHtml);
-    form.append('replyTo', SENDER_EMAIL);
+    form.append('replyTo', ZEXTRI_EMAIL_CONFIG.senderEmail);
     if (this.emailCc().trim()) form.append('cc', this.emailCc().trim());
     if (this.emailBcc().trim()) form.append('bcc', this.emailBcc().trim());
     form.append('isTest', String(preview.isTest));
@@ -584,11 +575,11 @@ export class AppComponent {
 
   private loadEmailTemplates(): void {
     forkJoin({
-      manifest: this.http.get<EmailTemplateMetadata[]>(EMAIL_TEMPLATE_MANIFEST_URL),
-      header: this.http.get('assets/email-templates/shared/email-header.html', { responseType: 'text' }),
-      signature: this.http.get('assets/email-templates/shared/email-signature.html', { responseType: 'text' }),
-      footer: this.http.get('assets/email-templates/shared/email-footer.html', { responseType: 'text' }),
-      layout: this.http.get('assets/email-templates/shared/email-layout.html', { responseType: 'text' })
+      manifest: this.http.get<EmailTemplateMetadata[]>(ZEXTRI_EMAIL_CONFIG.templateManifestUrl),
+      header: this.http.get(EMAIL_TEMPLATE_ASSET_PATHS.sharedHeader, { responseType: 'text' }),
+      signature: this.http.get(EMAIL_TEMPLATE_ASSET_PATHS.sharedSignature, { responseType: 'text' }),
+      footer: this.http.get(EMAIL_TEMPLATE_ASSET_PATHS.sharedFooter, { responseType: 'text' }),
+      layout: this.http.get(EMAIL_TEMPLATE_ASSET_PATHS.sharedLayout, { responseType: 'text' })
     }).subscribe({
       next: result => {
         const templates = result.manifest.filter(template => this.isValidTemplateMetadata(template));
@@ -732,7 +723,7 @@ export class AppComponent {
     }
 
     const leadEmail = lead.publicEmail?.trim() ?? '';
-    const requestedRecipient = isTest ? SENDER_EMAIL : this.emailTo().trim();
+    const requestedRecipient = isTest ? ZEXTRI_EMAIL_CONFIG.senderEmail : this.emailTo().trim();
     if (!this.isValidEmail(requestedRecipient)) {
       if (showFeedback) this.showToast('error', 'Email not ready', 'Enter a valid recipient email address.');
       return null;
@@ -767,7 +758,7 @@ export class AppComponent {
 
     return {
       recipient: requestedRecipient,
-      sender: `${SENDER_NAME} <${SENDER_EMAIL}>`,
+      sender: `${ZEXTRI_EMAIL_CONFIG.senderDisplayName} <${ZEXTRI_EMAIL_CONFIG.senderEmail}>`,
       subject,
       bodyHtml,
       bodyText,
@@ -779,15 +770,7 @@ export class AppComponent {
   }
 
   private defaultEmailCopy(): string {
-    return [
-      'Hi {{firstName}},',
-      '',
-      'I came across your work at {{company}} and thought Zextri could be useful for your growth workflow.',
-      '',
-      'Zextri helps teams identify relationships that need attention and write timely, context-aware follow-ups across LinkedIn and X.',
-      '',
-      'Would you be open to a quick look? I\'d be happy to send a short demo.'
-    ].join('\n');
+    return DEFAULT_EMAIL_TEMPLATE.body;
   }
 
   private resolveVariables(value: string, lead: Lead, forHtml = true): string {
@@ -796,12 +779,12 @@ export class AppComponent {
       firstName: this.firstName(lead),
       fullName: lead.displayName.trim(),
       company,
-      senderName: 'Bharat Bhushan',
-      senderTitle: 'Founder, Zextri',
-      websiteUrl: WEBSITE_URL,
-      demoUrl: DEMO_URL,
-      unsubscribeUrl: UNSUBSCRIBE_URL,
-      businessInfo: BUSINESS_INFO
+      senderName: ZEXTRI_EMAIL_CONFIG.senderName,
+      senderTitle: ZEXTRI_EMAIL_CONFIG.senderTitle,
+      websiteUrl: ZEXTRI_EMAIL_CONFIG.websiteUrl,
+      demoUrl: ZEXTRI_EMAIL_CONFIG.demoUrl,
+      unsubscribeUrl: ZEXTRI_EMAIL_CONFIG.unsubscribeUrl,
+      businessInfo: ZEXTRI_EMAIL_CONFIG.businessInfo
     };
 
     return value.replace(/\{\{\s*([a-zA-Z0-9]+)\s*\}\}/g, (_, key: string) => {
@@ -849,12 +832,12 @@ export class AppComponent {
       firstName: this.firstName(lead),
       fullName: lead.displayName.trim(),
       company: lead.company?.name?.trim() || '',
-      senderName: 'Bharat Bhushan',
-      senderTitle: 'Founder, Zextri',
-      websiteUrl: WEBSITE_URL,
-      demoUrl: DEMO_URL,
-      unsubscribeUrl: UNSUBSCRIBE_URL,
-      businessInfo: BUSINESS_INFO
+      senderName: ZEXTRI_EMAIL_CONFIG.senderName,
+      senderTitle: ZEXTRI_EMAIL_CONFIG.senderTitle,
+      websiteUrl: ZEXTRI_EMAIL_CONFIG.websiteUrl,
+      demoUrl: ZEXTRI_EMAIL_CONFIG.demoUrl,
+      unsubscribeUrl: ZEXTRI_EMAIL_CONFIG.unsubscribeUrl,
+      businessInfo: ZEXTRI_EMAIL_CONFIG.businessInfo
     };
 
     return template.requiredVariables.filter(variable => !values[variable]?.trim());
@@ -936,7 +919,7 @@ export class AppComponent {
         signature?: string;
         includeSignature?: boolean;
       };
-      this.emailReplyTo.set(SENDER_EMAIL);
+      this.emailReplyTo.set(ZEXTRI_EMAIL_CONFIG.senderEmail);
       this.emailCc.set(settings.cc ?? '');
       this.emailBcc.set(settings.bcc ?? '');
       this.emailSignatureHtml.set(this.normalizeSavedSignature(settings.signatureHtml, settings.signature));
@@ -984,8 +967,8 @@ export class AppComponent {
   private withComplianceFooter(bodyHtml: string): string {
     const footer = [
       '<div data-signalminer-compliance="true" style="margin-top:18px;padding-top:10px;border-top:1px solid #e5e7eb;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:16px;color:#6b7280;">',
-      `<div>${BUSINESS_INFO}</div>`,
-      `<div><a href="${UNSUBSCRIBE_URL}" style="color:#0f766e;text-decoration:none;">Unsubscribe</a> from future outreach.</div>`,
+      `<div>${ZEXTRI_EMAIL_CONFIG.businessInfo}</div>`,
+      `<div><a href="${ZEXTRI_EMAIL_CONFIG.unsubscribeUrl}" style="color:#0f766e;text-decoration:none;">Unsubscribe</a> from future outreach.</div>`,
       '</div>'
     ].join('');
     const withoutFooter = bodyHtml.replace(/<div data-signalminer-compliance="true"[\s\S]*?<\/div>\s*<\/div>/gi, '').trim();
@@ -1096,9 +1079,7 @@ export class AppComponent {
       return signatureHtml.trim();
     }
 
-    if (!legacySignature?.trim() ||
-        legacySignature === LEGACY_EMAIL_SIGNATURE ||
-        legacySignature === ZEXTRI_EMAIL_SIGNATURE_TEXT) {
+    if (!legacySignature?.trim() || this.isLegacyZextriSignature(this.textToHtml(legacySignature))) {
       return this.zextriSignatureHtml();
     }
 
@@ -1107,38 +1088,15 @@ export class AppComponent {
 
   private isLegacyZextriSignature(signatureHtml: string): boolean {
     const normalizedText = this.normalizeText(this.htmlToText(signatureHtml));
-    return normalizedText.includes('ai-assisted operations for faster-moving teams') ||
-      normalizedText.includes('ai-powered social intelligence for linkedin and x') ||
-      normalizedText.includes('write smarter. follow up better.');
+    return LEGACY_ZEXTRI_SIGNATURE_MARKERS.some(marker => normalizedText.includes(marker));
   }
 
   private zextriSignatureHtml(): string {
-    return [
-      '<table data-signalminer-signature="true" role="presentation" cellpadding="0" cellspacing="0" style="margin-top:22px;border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;color:#111827;">',
-      '<tr><td colspan="2" style="padding:0 0 14px;"><div style="width:72px;height:2px;background:#0f766e;line-height:2px;font-size:2px;">&nbsp;</div></td></tr>',
-      '<tr>',
-      '<td style="width:56px;vertical-align:top;padding:0 14px 0 0;">',
-      `<img src="${ZEXTRI_LOGO_URL}" alt="Zextri" width="44" height="44" style="display:block;width:44px;height:44px;border-radius:10px;border:1px solid #dbe3ea;">`,
-      '</td>',
-      '<td style="vertical-align:top;padding:0 0 0 14px;border-left:1px solid #d8dee6;">',
-      '<div style="font-size:14px;line-height:20px;color:#374151;margin:0 0 8px;">Warm regards,</div>',
-      '<div style="font-size:15px;line-height:21px;font-weight:700;color:#111827;margin:0;">Bharat Bhushan</div>',
-      '<div style="font-size:13px;line-height:19px;color:#4b5563;margin:2px 0 8px;">Founder, Zextri</div>',
-      '<div style="font-size:13px;line-height:19px;color:#374151;margin:0;">',
-      '<a href="https://zextri.com" style="color:#0f766e;text-decoration:none;font-weight:700;">zextri.com</a>',
-      '</div>',
-      '</td>',
-      '</tr>',
-      '</table>'
-    ].join('');
+    return FALLBACK_ZEXTRI_SIGNATURE_HTML;
   }
 
   private customSignatureHtml(signature: string): string {
-    return [
-      '<div data-signalminer-signature="true" style="margin-top:18px;padding:12px 0 0;border-top:1px solid #e2e8f0;font-family:Inter,Segoe UI,Arial,sans-serif;color:#172033;">',
-      this.textToHtml(signature),
-      '</div>'
-    ].join('');
+    return `${CUSTOM_SIGNATURE_WRAPPER.before}${this.textToHtml(signature)}${CUSTOM_SIGNATURE_WRAPPER.after}`;
   }
 
   protected updateStatus(status: ContactStatus): void {
