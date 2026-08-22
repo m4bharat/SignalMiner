@@ -1,30 +1,30 @@
 {{sharedHeader}}
-<p style="margin:0 0 16px;font-size:15px;line-height:24px;color:#111827;">Hi {{firstName}},</p>
-<p style="margin:0 0 16px;font-size:15px;line-height:24px;color:#334155;">I came across your work at {{company}} and thought Zextri could be useful for your growth workflow.</p>
-<p style="margin:0 0 18px;font-size:15px;line-height:24px;color:#334155;">Zextri helps teams identify relationships that need attention and write timely, context-aware follow-ups across LinkedIn and X.</p>
-<p style="margin:0 0 22px;font-size:15px;line-height:24px;color:#334155;">Would you be open to a quick look?</p>
+<p style="margin:0 0 16px;font-size:15px;line-height:24px;color:#111827;">{{emailGreeting}} {{firstName}},</p>
+<p style="margin:0 0 16px;font-size:15px;line-height:24px;color:#334155;">{{quickIntroductionOpening}}</p>
+<p style="margin:0 0 18px;font-size:15px;line-height:24px;color:#334155;">{{quickIntroductionBody}}</p>
+<p style="margin:0 0 22px;font-size:15px;line-height:24px;color:#334155;">{{quickIntroductionQuestion}}</p>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border-collapse:collapse;">
   <tr>
     <td style="padding:0;font-family:Inter,Arial,Helvetica,sans-serif;">
       <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 10px;">
         <tr>
-          <td bgcolor="#07070a" style="border-radius:10px;">
-            <a href="https://www.youtube.com/watch?v=Zo66nD5CMsc" style="display:inline-block;padding:12px 18px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:18px;font-weight:800;color:#ffffff;text-decoration:none;">Watch Demo</a>
+          <td bgcolor="#07070a" style="border-radius:10px;padding:12px 18px;">
+            <a href="{{quickIntroductionDemoUrl}}" style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:18px;font-weight:800;color:#ffffff;text-decoration:none;"><span style="color:#ffffff;text-decoration:none;">{{ctaWatchDemo}}</span></a>
           </td>
         </tr>
       </table>
       <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
         <tr>
-          <td bgcolor="#f8fafc" style="border:1px solid #dbe3ea;border-radius:8px;">
-            <a href="{{chromeUrl}}" style="display:inline-block;padding:8px 11px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:16px;font-weight:700;color:#0f172a;text-decoration:none;">Add to Chrome</a>
+          <td bgcolor="#ffffff" style="border:1px solid #d9dee7;border-radius:9px;padding:10px 18px;">
+            <a href="{{chromeUrl}}" style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:18px;font-weight:800;color:#202124;text-decoration:none;"><img src="{{chromeIconUrl}}" width="18" height="18" alt="" style="display:inline-block;width:18px;height:18px;vertical-align:-4px;margin-right:10px;border:0;"><span style="color:#202124;text-decoration:none;">{{ctaChrome}}</span></a>
           </td>
           <td style="width:8px;font-size:8px;line-height:8px;">&nbsp;</td>
-          <td bgcolor="#f8fafc" style="border:1px solid #dbe3ea;border-radius:8px;">
-            <a href="{{edgeUrl}}" style="display:inline-block;padding:8px 11px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:16px;font-weight:700;color:#0f172a;text-decoration:none;">Get for Edge</a>
+          <td bgcolor="#1473c7" style="border:1px solid #1473c7;border-radius:9px;padding:10px 18px;">
+            <a href="{{edgeUrl}}" style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:18px;font-weight:800;color:#ffffff;text-decoration:none;"><img src="{{edgeIconUrl}}" width="18" height="18" alt="" style="display:inline-block;width:18px;height:18px;vertical-align:-4px;margin-right:10px;border:0;"><span style="color:#ffffff;text-decoration:none;">{{ctaEdge}}</span></a>
           </td>
         </tr>
       </table>
-      <div style="margin-top:10px;font-size:12px;line-height:18px;color:#64748b;">Available on the official Chrome and Microsoft Edge stores.</div>
+      <div style="margin-top:10px;font-size:12px;line-height:18px;color:#64748b;">{{storeAvailability}}</div>
     </td>
   </tr>
 </table>

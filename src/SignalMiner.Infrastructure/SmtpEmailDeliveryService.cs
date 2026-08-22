@@ -70,7 +70,7 @@ public sealed class SmtpEmailDeliveryService(IConfiguration configuration) : IEm
             var providerResponse = await client.SendAsync(mail, cancellationToken);
             await client.DisconnectAsync(true, cancellationToken);
             return new EmailDeliveryResult(
-                "Submitted",
+                EmailStrings.SubmittedStatus,
                 ExtractProviderMessageId(providerResponse) ?? mail.MessageId,
                 DateTimeOffset.UtcNow);
         }
@@ -84,11 +84,11 @@ public sealed class SmtpEmailDeliveryService(IConfiguration configuration) : IEm
         }
         catch (SmtpProtocolException ex)
         {
-            throw new ManualEmailException($"Email could not be sent: Titan SMTP connection failed. Check the SMTP host, port, and SSL setting. Details: {ex.Message}", 502);
+            throw new ManualEmailException(EmailStrings.SmtpConnectionFailed(ex.Message), 502);
         }
         catch (InvalidOperationException ex)
         {
-            throw new ManualEmailException($"Email could not be sent: {ex.Message}", 502);
+            throw new ManualEmailException(EmailStrings.SendFailed(ex.Message), 502);
         }
     }
 
@@ -121,7 +121,7 @@ public sealed class SmtpEmailDeliveryService(IConfiguration configuration) : IEm
 
     private static string BuildAuthenticationErrorMessage(SmtpOptions options, MailKit.Security.AuthenticationException ex)
     {
-        return $"Email could not be sent: Titan SMTP login failed for {options.Username}. Enable Titan third-party access and use the mailbox password or app password. Details: {ex.Message}";
+        return EmailStrings.TitanLoginFailed(options.Username, ex.Message);
     }
 
     private static string BuildSmtpErrorMessage(string message, SmtpOptions options)
@@ -129,10 +129,10 @@ public sealed class SmtpEmailDeliveryService(IConfiguration configuration) : IEm
         if (message.Contains("Sender address rejected", StringComparison.OrdinalIgnoreCase) ||
             message.Contains("not logged in", StringComparison.OrdinalIgnoreCase))
         {
-            return $"Email could not be sent: Titan rejected sender {options.Username}. Enable Titan third-party access for this mailbox and use the mailbox password or app password, then restart the API.";
+            return EmailStrings.TitanRejectedSender(options.Username);
         }
 
-        return $"Email could not be sent: {message}";
+        return EmailStrings.SendFailed(message);
     }
 
     private sealed record SmtpOptions(
@@ -152,7 +152,7 @@ public sealed class SmtpEmailDeliveryService(IConfiguration configuration) : IEm
                 int.TryParse(section["Port"], out var port) ? port : 587,
                 bool.TryParse(section["EnableSsl"], out var enableSsl) ? enableSsl : true,
                 section["FromEmail"] ?? string.Empty,
-                section["FromName"] ?? "SignalMiner",
+                section["FromName"] ?? EmailStrings.DefaultFromName,
                 section["Username"] ?? string.Empty,
                 section["Password"] ?? string.Empty);
         }
@@ -164,7 +164,7 @@ public sealed class SmtpEmailDeliveryService(IConfiguration configuration) : IEm
                 string.IsNullOrWhiteSpace(Username) ||
                 string.IsNullOrWhiteSpace(Password))
             {
-                throw new ManualEmailException("Email sending is not configured. Set Email:Smtp host, from email, username, and password.", 503);
+                throw new ManualEmailException(EmailStrings.SmtpNotConfigured, 503);
             }
 
             _ = new MailboxAddress(FromName, FromEmail);

@@ -1,12 +1,8 @@
 {
   "id": "demo-follow-up",
-  "name": "Demo Follow-up",
-  "description": "Short follow-up for a prospect who has shown interest.",
-  "category": "Follow-up",
+  "stringsKey": "demo-follow-up",
   "version": "1.0.0",
-  "intendedUse": "Use after a conversation, demo, or prior interest.",
-  "defaultSubject": "Zextri demo for {{company}}",
   "htmlPath": "assets/email-templates/demo-follow-up/template.html",
-  "supportedVariables": ["firstName", "fullName", "company", "senderName", "senderTitle", "websiteUrl", "demoUrl", "relationshipDemoUrl", "followUpDemoUrl", "chromeUrl", "edgeUrl", "unsubscribeUrl"],
+  "supportedVariables": ["firstName", "fullName", "company", "senderName", "senderTitle", "websiteUrl", "demoUrl", "relationshipDemoUrl", "followUpDemoUrl", "chromeUrl", "edgeUrl", "chromeIconUrl", "edgeIconUrl", "unsubscribeUrl"],
   "requiredVariables": ["firstName", "company", "chromeUrl", "edgeUrl", "unsubscribeUrl"]
 }

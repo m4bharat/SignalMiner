@@ -9,7 +9,7 @@ public sealed class ManualEmailService(
 {
     private const int MaxAttachmentCount = 5;
     private const int MaxTotalAttachmentBytes = 10 * 1024 * 1024;
-    private const string TestRecipient = "hello@zextri.com";
+    private const string TestRecipient = EmailStrings.SenderEmail;
 
     public async Task<Lead?> SendAsync(Guid leadId, SendManualEmailRequest request, CancellationToken cancellationToken)
     {
@@ -24,30 +24,30 @@ public sealed class ManualEmailService(
         var toEmail = request.IsTest ? TestRecipient : requestedEmail;
         if (string.IsNullOrWhiteSpace(toEmail))
         {
-            throw new ManualEmailException("Enter a valid recipient email address.");
+            throw new ManualEmailException(EmailStrings.RecipientRequired);
         }
 
         if (!request.IsTest)
         {
             if (string.IsNullOrWhiteSpace(leadEmail))
             {
-                throw new ManualEmailException("This lead does not have a saved email address. Add the email to the lead before sending.");
+                throw new ManualEmailException(EmailStrings.LeadEmailRequired);
             }
 
             if (!string.Equals(toEmail, leadEmail, StringComparison.OrdinalIgnoreCase))
             {
-                throw new ManualEmailException("Recipient email does not match the selected lead. Refresh the lead and try again.");
+                throw new ManualEmailException(EmailStrings.RecipientMismatch);
             }
         }
 
         if (string.IsNullOrWhiteSpace(request.Subject))
         {
-            throw new ManualEmailException("Email subject is required.");
+            throw new ManualEmailException(EmailStrings.SubjectRequired);
         }
 
         if (string.IsNullOrWhiteSpace(request.Body))
         {
-            throw new ManualEmailException("Email body is required.");
+            throw new ManualEmailException(EmailStrings.BodyRequired);
         }
 
         var cc = ParseEmailList(request.Cc, "CC");
@@ -57,18 +57,18 @@ public sealed class ManualEmailService(
 
         if (request.Attachments.Count > MaxAttachmentCount)
         {
-            throw new ManualEmailException($"Attach up to {MaxAttachmentCount} files per email.");
+            throw new ManualEmailException(EmailStrings.AttachmentLimit(MaxAttachmentCount));
         }
 
         if (request.Attachments.Sum(attachment => attachment.Content.Length) > MaxTotalAttachmentBytes)
         {
-            throw new ManualEmailException("Attachments are too large. Keep total attachment size under 10 MB.");
+            throw new ManualEmailException(EmailStrings.AttachmentsTooLarge);
         }
 
         var deliveryResult = await delivery.SendAsync(
             new EmailMessage(
                 toEmail,
-                request.IsTest ? "Zextri Test Inbox" : lead.DisplayName,
+                request.IsTest ? EmailStrings.TestInboxName : lead.DisplayName,
                 request.Subject.Trim(),
                 bodyHtml ?? request.Body.Trim(),
                 bodyHtml is not null,
@@ -98,41 +98,41 @@ public sealed class ManualEmailService(
     {
         var parts = new List<string>
         {
-            $"Sent time: {deliveryResult.SubmittedAt:u}",
-            $"Delivery status: {deliveryResult.Status}",
-            $"Subject: {request.Subject.Trim()}",
-            $"To: {toEmail}",
+            $"{EmailStrings.SentTimeLabel} {deliveryResult.SubmittedAt:u}",
+            $"{EmailStrings.DeliveryStatusLabel} {deliveryResult.Status}",
+            $"{EmailStrings.SubjectLabel} {request.Subject.Trim()}",
+            $"{EmailStrings.ToLabel} {toEmail}",
             request.Body.Trim()
         };
 
         if (!string.IsNullOrWhiteSpace(request.TemplateId))
         {
-            parts.Insert(2, $"Template: {request.TemplateId.Trim()} v{request.TemplateVersion?.Trim() ?? "unknown"}");
+            parts.Insert(2, $"{EmailStrings.TemplateLabel} {request.TemplateId.Trim()} v{request.TemplateVersion?.Trim() ?? EmailStrings.UnknownTemplateVersion}");
         }
 
         if (!string.IsNullOrWhiteSpace(deliveryResult.ProviderMessageId))
         {
-            parts.Insert(2, $"Provider message ID: {deliveryResult.ProviderMessageId}");
+            parts.Insert(2, $"{EmailStrings.ProviderMessageIdLabel} {deliveryResult.ProviderMessageId}");
         }
 
         if (request.IsTest)
         {
-            parts.Insert(0, "Test email: true");
+            parts.Insert(0, EmailStrings.TestEmailLabel);
         }
 
         if (!string.IsNullOrWhiteSpace(request.ReplyTo))
         {
-            parts.Add($"Reply-to: {request.ReplyTo.Trim()}");
+            parts.Add($"{EmailStrings.ReplyToLabel} {request.ReplyTo.Trim()}");
         }
 
         if (!string.IsNullOrWhiteSpace(request.Cc))
         {
-            parts.Add($"CC: {request.Cc.Trim()}");
+            parts.Add($"{EmailStrings.CcLabel} {request.Cc.Trim()}");
         }
 
         if (request.Attachments.Count > 0)
         {
-            parts.Add($"Attachments: {string.Join(", ", request.Attachments.Select(attachment => attachment.FileName))}");
+            parts.Add($"{EmailStrings.AttachmentsLabel} {string.Join(", ", request.Attachments.Select(attachment => attachment.FileName))}");
         }
 
         return string.Join(Environment.NewLine, parts);
@@ -151,7 +151,7 @@ public sealed class ManualEmailService(
         }
         catch (FormatException)
         {
-            throw new ManualEmailException($"{fieldName} must be a valid email address.");
+            throw new ManualEmailException(EmailStrings.InvalidEmail(fieldName));
         }
     }
 
@@ -175,7 +175,7 @@ public sealed class ManualEmailService(
             }
             catch (FormatException)
             {
-                throw new ManualEmailException($"{fieldName} contains an invalid email address: {email}");
+                throw new ManualEmailException(EmailStrings.InvalidEmailInList(fieldName, email));
             }
         }
 

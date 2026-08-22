@@ -8,11 +8,13 @@ import {
   CUSTOM_SIGNATURE_WRAPPER,
   DEFAULT_EMAIL_TEMPLATE,
   EMAIL_TEMPLATE_ASSET_PATHS,
+  FALLBACK_EMAIL_LAYOUT_HTML,
   FALLBACK_ZEXTRI_SIGNATURE_HTML,
   LEGACY_ZEXTRI_SIGNATURE_MARKERS,
   SIGNATURE_TEXT_MARKERS,
   ZEXTRI_EMAIL_CONFIG
 } from './email-template-config';
+import { EmailStrings, EmailTemplateId, EmailTemplateStrings } from './email-strings';
 
 type ContactStatus = 'NotContacted' | 'ReadyForManualOutreach' | 'Contacted' | 'Replied' | 'NotInterested' | 'DoNotContact';
 type LeadStatus = 'New' | 'Enriched' | 'NeedsManualReview' | 'Qualified' | 'Disqualified' | 'Archived';
@@ -36,6 +38,7 @@ interface EmailPreview {
 
 interface EmailTemplateMetadata {
   id: string;
+  stringsKey?: string;
   name: string;
   description: string;
   category: string;
@@ -124,9 +127,9 @@ export class AppComponent {
   private readonly http = inject(HttpClient);
   private readonly apiBase = 'http://localhost:5126/api';
   private toastTimer: number | undefined;
-  private emailEditorVersion = 0;
   private sharedEmailTemplateParts: SharedEmailTemplateParts | null = null;
   private templateHtmlCache = new Map<string, string>();
+  protected readonly emailStrings = EmailStrings;
 
   protected readonly leads = signal<Lead[]>([]);
   protected readonly selectedLead = signal<Lead | null>(null);
@@ -145,11 +148,13 @@ export class AppComponent {
   protected readonly emailTo = signal('');
   protected readonly emailSubject = signal('');
   protected readonly emailBodyHtml = signal('');
+  protected readonly emailBodyEditorHtml = signal('');
   protected readonly emailAttachments = signal<File[]>([]);
   protected readonly emailReplyTo = signal('');
   protected readonly emailCc = signal('');
   protected readonly emailBcc = signal('');
   protected readonly emailSignatureHtml = signal('');
+  protected readonly emailSignatureEditorHtml = signal('');
   protected readonly includeSignature = signal(true);
   protected readonly emailSending = signal(false);
   protected readonly draftDirty = signal(false);
@@ -314,7 +319,7 @@ export class AppComponent {
 
   protected selectLead(lead: Lead): void {
     if (this.draftDirty() && this.activeEmailLeadId() && this.activeEmailLeadId() !== lead.id) {
-      const shouldSwitch = window.confirm('You have an unsaved email draft. Switch contacts and replace the draft?');
+      const shouldSwitch = window.confirm(EmailStrings.ui.confirms.unsavedDraftSwitch);
       if (!shouldSwitch) {
         return;
       }
@@ -333,13 +338,12 @@ export class AppComponent {
     this.emailAttachments.set([]);
     this.emailPreview.set(null);
     this.draftDirty.set(false);
-    this.emailEditorVersion++;
     const templateId = this.selectedEmailTemplateId() || this.emailTemplates()[0]?.id;
     if (templateId) {
       this.applyEmailTemplate(templateId, false);
     } else {
       this.emailSubject.set(DEFAULT_EMAIL_TEMPLATE.subject);
-      this.emailBodyHtml.set(this.composeEmailTemplateHtml(this.defaultEmailCopy()));
+      this.setEmailBodyHtml(this.resolveDraftHtmlForEditor(this.composeEmailTemplateHtml(this.defaultEmailCopy())));
       this.selectedEmailTemplateName.set(DEFAULT_EMAIL_TEMPLATE.name);
       this.selectedEmailTemplateVersion.set(DEFAULT_EMAIL_TEMPLATE.version);
     }
@@ -352,7 +356,7 @@ export class AppComponent {
   protected resetToTemplate(): void {
     const template = this.selectedOrDefaultTemplate();
     if (!template) {
-      this.showToast('error', 'Templates loading', 'Email templates are still loading. Try again in a moment.');
+      this.showToast('error', EmailStrings.ui.toasts.templatesLoadingTitle, EmailStrings.ui.toasts.templatesLoadingBody);
       return;
     }
 
@@ -360,21 +364,21 @@ export class AppComponent {
   }
 
   protected updateEmailBody(event: Event): void {
-    this.emailBodyHtml.set((event.target as HTMLElement).innerHTML);
+    this.setEmailBodyHtml((event.target as HTMLElement).innerHTML, false);
     this.markDraftDirty();
   }
 
   protected updateEmailSignature(event: Event): void {
-    this.emailSignatureHtml.set((event.target as HTMLElement).innerHTML);
+    this.setEmailSignatureHtml((event.target as HTMLElement).innerHTML, false);
     if (this.includeSignature()) {
-      this.emailBodyHtml.set(this.withDefaultSignature(this.emailBodyHtml()));
+      this.setEmailBodyHtml(this.withDefaultSignature(this.emailBodyHtml()));
     }
     this.markDraftDirty();
   }
 
   protected setIncludeSignature(value: boolean): void {
     this.includeSignature.set(value);
-    this.emailBodyHtml.set(value
+    this.setEmailBodyHtml(value
       ? this.withDefaultSignature(this.emailBodyHtml())
       : this.removeSignature(this.emailBodyHtml()));
     this.markDraftDirty();
@@ -385,7 +389,7 @@ export class AppComponent {
   }
 
   protected addEmailLink(): void {
-    const url = window.prompt('Link URL');
+    const url = window.prompt(EmailStrings.ui.toolbar.addLinkPrompt);
     if (!url) return;
 
     const normalizedUrl = url.startsWith('http') ? url : `https://${url}`;
@@ -408,25 +412,25 @@ export class AppComponent {
     };
 
     localStorage.setItem('signalminer.emailSettings', JSON.stringify(settings));
-    this.message.set('Email settings saved for this browser.');
+    this.message.set(EmailStrings.ui.messages.emailSettingsSaved);
   }
 
   protected insertSignature(): void {
     const signatureHtml = this.signatureHtml();
     if (!signatureHtml) {
-      this.message.set('Add a signature in email settings first.');
+      this.message.set(EmailStrings.ui.messages.addSignatureFirst);
       return;
     }
 
-    this.emailBodyHtml.set(this.withDefaultSignature(this.emailBodyHtml()));
+    this.setEmailBodyHtml(this.withDefaultSignature(this.emailBodyHtml()));
     this.markDraftDirty();
   }
 
   protected useZextriSignature(): void {
-    this.emailSignatureHtml.set(this.zextriSignatureHtml());
+    this.setEmailSignatureHtml(this.zextriSignatureHtml());
     this.includeSignature.set(true);
-    this.emailBodyHtml.set(this.withDefaultSignature(this.removeSignature(this.emailBodyHtml())));
-    this.message.set('Market-ready Zextri signature applied.');
+    this.setEmailBodyHtml(this.withDefaultSignature(this.removeSignature(this.emailBodyHtml())));
+    this.message.set(EmailStrings.ui.messages.signatureApplied);
     this.markDraftDirty();
   }
 
@@ -466,7 +470,7 @@ export class AppComponent {
       .filter(Boolean);
     const rest = paragraphs.slice(2).join('\n\n') || DEFAULT_EMAIL_TEMPLATE.fallbackBodyRest;
 
-    this.emailBodyHtml.set(this.withDefaultSignature(this.textToHtml(`${opening}\n\n${rest}`)));
+    this.setEmailBodyHtml(this.withDefaultSignature(this.textToHtml(`${opening}\n\n${rest}`)));
     this.markDraftDirty();
     this.previewEmail();
   }
@@ -479,7 +483,7 @@ export class AppComponent {
 
     this.emailPreview.set(preview);
     const confirmed = window.confirm(buildTestEmailConfirmation({
-      leadName: this.selectedLead()?.displayName ?? 'Selected lead',
+      leadName: this.selectedLead()?.displayName ?? EmailStrings.ui.empty.noLeadSelected,
       recipient: preview.recipient,
       sender: preview.sender,
       templateName: preview.templateName,
@@ -544,10 +548,10 @@ export class AppComponent {
       next: updated => {
         this.selectedLead.set(updated);
         const successMessage = preview.isTest
-          ? `Test email sent to ${preview.recipient}.`
-          : `Email submitted to ${preview.recipient}.`;
+          ? `${EmailStrings.ui.messages.testEmailSentPrefix} ${preview.recipient}.`
+          : `${EmailStrings.ui.messages.emailSubmittedPrefix} ${preview.recipient}.`;
         this.message.set(successMessage);
-        this.showToast('success', 'Email sent', successMessage);
+        this.showToast('success', EmailStrings.ui.toasts.emailSentTitle, successMessage);
         this.loading.set(false);
         this.emailSending.set(false);
         if (!preview.isTest) {
@@ -556,9 +560,9 @@ export class AppComponent {
         this.search(false);
       },
       error: (error: HttpErrorResponse) => {
-        const errorMessage = this.getErrorMessage(error, 'Email could not be sent. Check SMTP settings and try again.');
+        const errorMessage = this.getErrorMessage(error, EmailStrings.ui.toasts.emailFailedBody);
         this.message.set(errorMessage);
-        this.showToast('error', 'Email failed', errorMessage);
+        this.showToast('error', EmailStrings.ui.toasts.emailFailedTitle, errorMessage);
         this.loading.set(false);
         this.emailSending.set(false);
       }
@@ -582,7 +586,9 @@ export class AppComponent {
       layout: this.http.get(EMAIL_TEMPLATE_ASSET_PATHS.sharedLayout, { responseType: 'text' })
     }).subscribe({
       next: result => {
-        const templates = result.manifest.filter(template => this.isValidTemplateMetadata(template));
+        const templates = result.manifest
+          .map(template => this.withTemplateStrings(template))
+          .filter(template => this.isValidTemplateMetadata(template));
         this.sharedEmailTemplateParts = {
           header: result.header,
           signature: result.signature,
@@ -591,7 +597,7 @@ export class AppComponent {
         };
         this.emailTemplates.set(templates);
         if (templates.length === 0) {
-          this.showToast('error', 'Templates unavailable', 'No valid email templates were found.');
+          this.showToast('error', EmailStrings.ui.toasts.templatesUnavailableTitle, EmailStrings.ui.toasts.noValidTemplatesBody);
           return;
         }
 
@@ -607,19 +613,19 @@ export class AppComponent {
           this.applyEmailTemplate(this.selectedEmailTemplateId(), false);
         }
       },
-      error: () => this.showToast('error', 'Templates unavailable', 'Email template assets could not be loaded. Restart the UI server so Angular serves the new assets folder.')
+      error: () => this.showToast('error', EmailStrings.ui.toasts.templatesUnavailableTitle, EmailStrings.ui.toasts.templateAssetsUnavailableBody)
     });
   }
 
   private applyEmailTemplate(templateId: string, confirmReplace: boolean): void {
     const template = this.emailTemplates().find(item => item.id === templateId) ?? this.selectedOrDefaultTemplate();
     if (!template || !this.isValidTemplateMetadata(template)) {
-      this.showToast('error', 'Template unavailable', 'The selected email template is not valid.');
+      this.showToast('error', EmailStrings.ui.toasts.templatesUnavailableTitle, EmailStrings.ui.toasts.selectedTemplateInvalidBody);
       return;
     }
 
     if (confirmReplace && this.draftDirty()) {
-      const shouldReplace = window.confirm('Replace the current draft with this template?');
+      const shouldReplace = window.confirm(EmailStrings.ui.confirms.replaceDraft);
       if (!shouldReplace) {
         return;
       }
@@ -636,7 +642,7 @@ export class AppComponent {
         this.templateHtmlCache.set(template.id, html);
         this.applyLoadedTemplate(template, html);
       },
-      error: () => this.showToast('error', 'Template unavailable', 'The current draft was preserved because the template file could not be loaded.')
+      error: () => this.showToast('error', EmailStrings.ui.toasts.templatesUnavailableTitle, EmailStrings.ui.toasts.selectedTemplateLoadFailedBody)
     });
   }
 
@@ -645,10 +651,28 @@ export class AppComponent {
     this.selectedEmailTemplateName.set(template.name);
     this.selectedEmailTemplateVersion.set(template.version);
     this.emailSubject.set(template.defaultSubject);
-    this.emailBodyHtml.set(this.composeEmailTemplateHtml(html));
+    this.setEmailBodyHtml(this.resolveDraftHtmlForEditor(this.composeEmailTemplateHtml(html)));
     this.emailPreview.set(null);
     this.draftDirty.set(false);
-    this.emailEditorVersion++;
+  }
+
+  private setEmailBodyHtml(value: string, updateEditor = true): void {
+    this.emailBodyHtml.set(value);
+    if (updateEditor) {
+      this.emailBodyEditorHtml.set(value);
+    }
+  }
+
+  private setEmailSignatureHtml(value: string, updateEditor = true): void {
+    this.emailSignatureHtml.set(value);
+    if (updateEditor) {
+      this.emailSignatureEditorHtml.set(value);
+    }
+  }
+
+  private resolveDraftHtmlForEditor(html: string): string {
+    const lead = this.selectedLead();
+    return lead ? this.resolveVariables(html, lead) : html;
   }
 
   private isValidTemplateMetadata(template: EmailTemplateMetadata): boolean {
@@ -658,6 +682,23 @@ export class AppComponent {
       Boolean(template.version?.trim()) &&
       Array.isArray(template.supportedVariables) &&
       Array.isArray(template.requiredVariables);
+  }
+
+  private withTemplateStrings(template: EmailTemplateMetadata): EmailTemplateMetadata {
+    const strings = EmailTemplateStrings[template.id as EmailTemplateId];
+    if (!strings) {
+      return template;
+    }
+
+    return {
+      ...template,
+      stringsKey: template.stringsKey ?? template.id,
+      name: strings.name,
+      description: strings.description,
+      category: strings.category,
+      intendedUse: strings.intendedUse,
+      defaultSubject: strings.defaultSubject
+    };
   }
 
   private selectedOrDefaultTemplate(): EmailTemplateMetadata | null {
@@ -679,15 +720,15 @@ export class AppComponent {
   protected selectedRecipientLabel(): string {
     const lead = this.selectedLead();
     if (!lead) {
-      return 'No lead selected';
+      return EmailStrings.ui.empty.noLeadSelected;
     }
 
-    return `${lead.displayName}${lead.company?.name ? ` at ${lead.company.name}` : ''} <${lead.publicEmail || 'no email'}>`;
+    return `${lead.displayName}${lead.company?.name ? ` at ${lead.company.name}` : ''} <${lead.publicEmail || EmailStrings.ui.empty.noEmail}>`;
   }
 
   private leadSummary(lead: Lead | null): string {
     if (!lead) {
-      return 'Selected lead';
+      return EmailStrings.ui.empty.noLeadSelected;
     }
 
     return `${lead.displayName}${lead.company?.name ? ` at ${lead.company.name}` : ''}`;
@@ -713,30 +754,30 @@ export class AppComponent {
   private buildEmailPreview(isTest: boolean, showFeedback = true): EmailPreview | null {
     const lead = this.selectedLead();
     if (!lead) {
-      if (showFeedback) this.showToast('error', 'Email not ready', 'Select a lead before sending.');
+      if (showFeedback) this.showToast('error', EmailStrings.ui.toasts.emailNotReadyTitle, EmailStrings.ui.toasts.selectLeadBody);
       return null;
     }
 
     if (this.activeEmailLeadId() !== lead.id) {
-      if (showFeedback) this.showToast('error', 'Email not ready', 'The draft belongs to another lead. Refresh the selected contact.');
+      if (showFeedback) this.showToast('error', EmailStrings.ui.toasts.emailNotReadyTitle, EmailStrings.ui.toasts.draftBelongsToAnotherLeadBody);
       return null;
     }
 
     const leadEmail = lead.publicEmail?.trim() ?? '';
     const requestedRecipient = isTest ? ZEXTRI_EMAIL_CONFIG.senderEmail : this.emailTo().trim();
     if (!this.isValidEmail(requestedRecipient)) {
-      if (showFeedback) this.showToast('error', 'Email not ready', 'Enter a valid recipient email address.');
+      if (showFeedback) this.showToast('error', EmailStrings.ui.toasts.emailNotReadyTitle, EmailStrings.ui.toasts.validRecipientBody);
       return null;
     }
 
     if (!isTest) {
       if (!leadEmail) {
-        if (showFeedback) this.showToast('error', 'Email not ready', 'This lead does not have a saved email address.');
+        if (showFeedback) this.showToast('error', EmailStrings.ui.toasts.emailNotReadyTitle, EmailStrings.ui.toasts.missingLeadEmailBody);
         return null;
       }
 
       if (requestedRecipient.toLowerCase() !== leadEmail.toLowerCase()) {
-        if (showFeedback) this.showToast('error', 'Email not ready', 'Recipient email must match the selected lead.');
+        if (showFeedback) this.showToast('error', EmailStrings.ui.toasts.emailNotReadyTitle, EmailStrings.ui.toasts.recipientMismatchBody);
         return null;
       }
     }
@@ -747,12 +788,12 @@ export class AppComponent {
     const unresolvedVariables = this.findUnresolvedVariables(`${subject}\n${bodyText}`);
     const missingRequiredVariables = this.getMissingRequiredVariables(lead);
     if (!subject || !bodyText) {
-      if (showFeedback) this.showToast('error', 'Email not ready', 'Subject and message are required.');
+      if (showFeedback) this.showToast('error', EmailStrings.ui.toasts.emailNotReadyTitle, EmailStrings.ui.toasts.subjectAndBodyRequiredBody);
       return null;
     }
 
     if (unresolvedVariables.length > 0 || missingRequiredVariables.length > 0) {
-      if (showFeedback) this.showToast('error', 'Email not ready', 'Required template variables are missing or unresolved.');
+      if (showFeedback) this.showToast('error', EmailStrings.ui.toasts.emailNotReadyTitle, EmailStrings.ui.toasts.requiredVariablesBody);
       return null;
     }
 
@@ -764,8 +805,8 @@ export class AppComponent {
       bodyText,
       warnings: this.getDraftWarnings(lead),
       isTest,
-      templateName: this.selectedEmailTemplateName() || 'Custom draft',
-      templateVersion: this.selectedEmailTemplateVersion() || 'draft'
+      templateName: this.selectedEmailTemplateName() || EmailStrings.preview.customDraftName,
+      templateVersion: this.selectedEmailTemplateVersion() || EmailStrings.preview.draftVersion
     };
   }
 
@@ -776,6 +817,9 @@ export class AppComponent {
   private resolveVariables(value: string, lead: Lead, forHtml = true): string {
     const company = lead.company?.name?.trim() || '';
     const variables: Record<string, string> = {
+      brandName: EmailStrings.brand.name,
+      logoAlt: EmailStrings.brand.logoAlt,
+      logoUrl: ZEXTRI_EMAIL_CONFIG.logoUrl,
       firstName: this.firstName(lead),
       fullName: lead.displayName.trim(),
       company,
@@ -783,12 +827,34 @@ export class AppComponent {
       senderTitle: ZEXTRI_EMAIL_CONFIG.senderTitle,
       websiteUrl: ZEXTRI_EMAIL_CONFIG.websiteUrl,
       demoUrl: ZEXTRI_EMAIL_CONFIG.demoUrl,
+      quickIntroductionDemoUrl: ZEXTRI_EMAIL_CONFIG.demoUrl,
       relationshipDemoUrl: ZEXTRI_EMAIL_CONFIG.relationshipDemoUrl,
       followUpDemoUrl: ZEXTRI_EMAIL_CONFIG.followUpDemoUrl,
       chromeUrl: ZEXTRI_EMAIL_CONFIG.chromeUrl,
       edgeUrl: ZEXTRI_EMAIL_CONFIG.edgeUrl,
+      chromeIconUrl: ZEXTRI_EMAIL_CONFIG.chromeIconUrl,
+      edgeIconUrl: ZEXTRI_EMAIL_CONFIG.edgeIconUrl,
       unsubscribeUrl: ZEXTRI_EMAIL_CONFIG.unsubscribeUrl,
-      businessInfo: ZEXTRI_EMAIL_CONFIG.businessInfo
+      businessInfo: ZEXTRI_EMAIL_CONFIG.businessInfo,
+      emailGreeting: EmailStrings.templates.shared.greeting,
+      ctaWatchDemo: EmailStrings.templates.shared.ctaWatchDemo,
+      ctaChrome: EmailStrings.templates.shared.ctaChrome,
+      ctaEdge: EmailStrings.templates.shared.ctaEdge,
+      storeAvailability: EmailStrings.templates.shared.storeAvailability,
+      signatureClosing: EmailStrings.templates.shared.signatureClosing,
+      signatureWebsiteLabel: EmailStrings.templates.shared.signatureWebsiteLabel,
+      unsubscribeLabel: EmailStrings.templates.shared.unsubscribeLabel,
+      unsubscribeSuffix: EmailStrings.templates.shared.unsubscribeSuffix,
+      quickIntroductionOpening: this.resolveEmailStringTemplate(EmailStrings.templates.quickIntroduction.opening, { company }),
+      quickIntroductionBody: EmailStrings.templates.quickIntroduction.body,
+      quickIntroductionQuestion: EmailStrings.templates.quickIntroduction.question,
+      relationshipValueOpening: this.resolveEmailStringTemplate(EmailStrings.templates.relationshipValue.opening, { company }),
+      relationshipSignalEyebrow: EmailStrings.templates.relationshipValue.signalEyebrow,
+      relationshipSignalHeading: EmailStrings.templates.relationshipValue.signalHeading,
+      relationshipSignalBody: EmailStrings.templates.relationshipValue.signalBody,
+      relationshipValueQuestion: EmailStrings.templates.relationshipValue.question,
+      demoFollowUpOpening: this.resolveEmailStringTemplate(EmailStrings.templates.demoFollowUp.opening, { company }),
+      demoFollowUpBody: EmailStrings.templates.demoFollowUp.body
     };
 
     return value.replace(/\{\{\s*([a-zA-Z0-9]+)\s*\}\}/g, (_, key: string) => {
@@ -797,9 +863,13 @@ export class AppComponent {
     });
   }
 
+  private resolveEmailStringTemplate(value: string, variables: Record<string, string>): string {
+    return value.replace(/\{\{\s*([a-zA-Z0-9]+)\s*\}\}/g, (_, key: string) => variables[key] ?? '');
+  }
+
   private getDraftWarnings(lead: Lead | null): string[] {
     if (!lead) {
-      return ['No lead is selected.'];
+      return [EmailStrings.ui.warnings.noLead];
     }
 
     const warnings: string[] = [];
@@ -810,17 +880,17 @@ export class AppComponent {
     const missingRequiredVariables = this.getMissingRequiredVariables(lead);
     const unresolvedVariables = this.findUnresolvedVariables(`${subjectText} ${bodyText}`);
 
-    if (!firstName) warnings.push('Greeting may be missing because the lead name is blank.');
-    if (!company) warnings.push('Company name is missing for this lead.');
-    if (!lead.publicEmail) warnings.push('Recipient email is missing for this lead.');
+    if (!firstName) warnings.push(EmailStrings.ui.warnings.missingGreeting);
+    if (!company) warnings.push(EmailStrings.ui.warnings.missingCompany);
+    if (!lead.publicEmail) warnings.push(EmailStrings.ui.warnings.missingRecipient);
     for (const variable of missingRequiredVariables) {
-      warnings.push(`Required template variable is missing: {{${variable}}}.`);
+      warnings.push(`${EmailStrings.ui.warnings.missingRequiredVariablePrefix} {{${variable}}}.`);
     }
     if (this.emailTo().trim() && lead.publicEmail && this.emailTo().trim().toLowerCase() !== lead.publicEmail.trim().toLowerCase()) {
-      warnings.push('Recipient email does not match the selected lead.');
+      warnings.push(EmailStrings.ui.warnings.recipientMismatch);
     }
     if (unresolvedVariables.length > 0) {
-      warnings.push(`Unresolved variables remain: ${unresolvedVariables.map(variable => `{{${variable}}}`).join(', ')}.`);
+      warnings.push(`${EmailStrings.ui.warnings.unresolvedVariablesPrefix} ${unresolvedVariables.map(variable => `{{${variable}}}`).join(', ')}.`);
     }
 
     return warnings;
@@ -840,12 +910,37 @@ export class AppComponent {
       senderTitle: ZEXTRI_EMAIL_CONFIG.senderTitle,
       websiteUrl: ZEXTRI_EMAIL_CONFIG.websiteUrl,
       demoUrl: ZEXTRI_EMAIL_CONFIG.demoUrl,
+      quickIntroductionDemoUrl: ZEXTRI_EMAIL_CONFIG.demoUrl,
       relationshipDemoUrl: ZEXTRI_EMAIL_CONFIG.relationshipDemoUrl,
       followUpDemoUrl: ZEXTRI_EMAIL_CONFIG.followUpDemoUrl,
       chromeUrl: ZEXTRI_EMAIL_CONFIG.chromeUrl,
       edgeUrl: ZEXTRI_EMAIL_CONFIG.edgeUrl,
+      chromeIconUrl: ZEXTRI_EMAIL_CONFIG.chromeIconUrl,
+      edgeIconUrl: ZEXTRI_EMAIL_CONFIG.edgeIconUrl,
       unsubscribeUrl: ZEXTRI_EMAIL_CONFIG.unsubscribeUrl,
-      businessInfo: ZEXTRI_EMAIL_CONFIG.businessInfo
+      businessInfo: ZEXTRI_EMAIL_CONFIG.businessInfo,
+      brandName: EmailStrings.brand.name,
+      logoAlt: EmailStrings.brand.logoAlt,
+      logoUrl: ZEXTRI_EMAIL_CONFIG.logoUrl,
+      emailGreeting: EmailStrings.templates.shared.greeting,
+      ctaWatchDemo: EmailStrings.templates.shared.ctaWatchDemo,
+      ctaChrome: EmailStrings.templates.shared.ctaChrome,
+      ctaEdge: EmailStrings.templates.shared.ctaEdge,
+      storeAvailability: EmailStrings.templates.shared.storeAvailability,
+      signatureClosing: EmailStrings.templates.shared.signatureClosing,
+      signatureWebsiteLabel: EmailStrings.templates.shared.signatureWebsiteLabel,
+      unsubscribeLabel: EmailStrings.templates.shared.unsubscribeLabel,
+      unsubscribeSuffix: EmailStrings.templates.shared.unsubscribeSuffix,
+      quickIntroductionOpening: EmailStrings.templates.quickIntroduction.opening,
+      quickIntroductionBody: EmailStrings.templates.quickIntroduction.body,
+      quickIntroductionQuestion: EmailStrings.templates.quickIntroduction.question,
+      relationshipValueOpening: EmailStrings.templates.relationshipValue.opening,
+      relationshipSignalEyebrow: EmailStrings.templates.relationshipValue.signalEyebrow,
+      relationshipSignalHeading: EmailStrings.templates.relationshipValue.signalHeading,
+      relationshipSignalBody: EmailStrings.templates.relationshipValue.signalBody,
+      relationshipValueQuestion: EmailStrings.templates.relationshipValue.question,
+      demoFollowUpOpening: EmailStrings.templates.demoFollowUp.opening,
+      demoFollowUpBody: EmailStrings.templates.demoFollowUp.body
     };
 
     return template.requiredVariables.filter(variable => !values[variable]?.trim());
@@ -914,7 +1009,7 @@ export class AppComponent {
   private loadEmailSettings(): void {
     const saved = localStorage.getItem('signalminer.emailSettings');
     if (!saved) {
-      this.emailSignatureHtml.set(this.zextriSignatureHtml());
+      this.setEmailSignatureHtml(this.zextriSignatureHtml());
       return;
     }
 
@@ -930,11 +1025,11 @@ export class AppComponent {
       this.emailReplyTo.set(ZEXTRI_EMAIL_CONFIG.senderEmail);
       this.emailCc.set(settings.cc ?? '');
       this.emailBcc.set(settings.bcc ?? '');
-      this.emailSignatureHtml.set(this.normalizeSavedSignature(settings.signatureHtml, settings.signature));
+      this.setEmailSignatureHtml(this.normalizeSavedSignature(settings.signatureHtml, settings.signature));
       this.includeSignature.set(settings.includeSignature ?? true);
     } catch {
-      this.message.set('Saved email settings could not be loaded.');
-      this.emailSignatureHtml.set(this.zextriSignatureHtml());
+      this.message.set(EmailStrings.ui.messages.savedSettingsLoadFailed);
+      this.setEmailSignatureHtml(this.zextriSignatureHtml());
     }
   }
 
@@ -946,13 +1041,137 @@ export class AppComponent {
       : sanitizedBody;
 
     if (this.selectedEmailTemplateId()) {
-      return resolvedBody;
+      return this.ensureStyledTemplateEmail(resolvedBody);
     }
 
     const signedBody = this.includeSignature()
       ? this.withDefaultSignature(resolvedBody)
       : this.removeSignature(resolvedBody);
     return this.withComplianceFooter(signedBody);
+  }
+
+  private ensureStyledTemplateEmail(bodyHtml: string): string {
+    const repaired = this.repairEmailClientStyles(bodyHtml);
+    if (repaired.includes('data-zextri-email-layout="true"') || repaired.includes('max-width:640px')) {
+      return repaired;
+    }
+
+    const layout = this.sharedEmailTemplateParts?.layout ?? FALLBACK_EMAIL_LAYOUT_HTML;
+    return layout.replace('{{emailContent}}', repaired);
+  }
+
+  private repairEmailClientStyles(bodyHtml: string): string {
+    const container = document.createElement('div');
+    container.innerHTML = bodyHtml;
+    this.styleEmailLink(container, EmailStrings.templates.shared.ctaWatchDemo, {
+      table: 'border-collapse:collapse;margin:0 0 10px;',
+      td: 'border-radius:10px;padding:12px 18px;',
+      bg: '#07070a',
+      anchor: 'font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:18px;font-weight:800;color:#ffffff;text-decoration:none;',
+      span: 'color:#ffffff;text-decoration:none;'
+    });
+    this.styleEmailLink(container, EmailStrings.templates.shared.ctaChrome, {
+      table: 'border-collapse:collapse;margin:0 0 10px;',
+      td: 'border:1px solid #d9dee7;border-radius:9px;padding:10px 18px;',
+      bg: '#ffffff',
+      anchor: 'font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:18px;font-weight:800;color:#202124;text-decoration:none;',
+      span: 'color:#202124;text-decoration:none;',
+      iconUrl: ZEXTRI_EMAIL_CONFIG.chromeIconUrl
+    });
+    this.styleEmailLink(container, EmailStrings.templates.shared.ctaEdge, {
+      table: 'border-collapse:collapse;margin:0 0 10px;',
+      td: 'border:1px solid #1473c7;border-radius:9px;padding:10px 18px;',
+      bg: '#1473c7',
+      anchor: 'font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:18px;font-weight:800;color:#ffffff;text-decoration:none;',
+      span: 'color:#ffffff;text-decoration:none;',
+      iconUrl: ZEXTRI_EMAIL_CONFIG.edgeIconUrl,
+      aliases: ['Get for Edge']
+    });
+    this.styleEmailLink(container, EmailStrings.templates.shared.signatureWebsiteLabel, {
+      anchor: 'color:#2563eb;text-decoration:none;font-weight:700;',
+      span: 'color:#2563eb;text-decoration:none;',
+      block: 'margin:6px 0 0;font-size:13px;line-height:19px;'
+    });
+    this.styleEmailLink(container, EmailStrings.templates.shared.unsubscribeLabel, {
+      anchor: 'color:#2563eb;text-decoration:none;',
+      span: 'color:#2563eb;text-decoration:none;',
+      block: 'margin-top:26px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;line-height:16px;color:#6b7280;'
+    });
+    this.styleTextBlock(container, EmailStrings.templates.shared.storeAvailability, 'margin:10px 0 28px;font-size:12px;line-height:18px;color:#64748b;');
+    this.styleTextBlock(container, EmailStrings.templates.shared.signatureClosing, 'margin:0 0 2px;font-size:15px;line-height:21px;font-weight:700;color:#111827;');
+    this.styleTextBlock(container, ZEXTRI_EMAIL_CONFIG.senderTitle, 'margin:6px 0 0;font-size:13px;line-height:19px;color:#4b5563;');
+    return container.innerHTML.trim();
+  }
+
+  private styleEmailLink(
+    container: HTMLElement,
+    label: string,
+    styles: {
+      table?: string;
+      td?: string;
+      bg?: string;
+      anchor: string;
+      span: string;
+      block?: string;
+      iconUrl?: string;
+      aliases?: string[];
+    }
+  ): void {
+    const labels = [label, ...(styles.aliases ?? [])];
+    const anchor = Array.from(container.querySelectorAll('a'))
+      .find(item => labels.includes((item.textContent ?? '').trim()));
+    if (!anchor) {
+      return;
+    }
+
+    anchor.setAttribute('style', styles.anchor);
+    const icon = styles.iconUrl
+      ? `<img src="${this.escapeHtml(styles.iconUrl)}" width="18" height="18" alt="" style="display:inline-block;width:18px;height:18px;vertical-align:-4px;margin-right:10px;border:0;">`
+      : '';
+    anchor.innerHTML = `${icon}<span style="${styles.span}">${this.escapeHtml(label)}</span>`;
+
+    const cell = anchor.closest('td');
+    if (cell && styles.td) {
+      cell.setAttribute('style', styles.td);
+      if (styles.bg) {
+        cell.setAttribute('bgcolor', styles.bg);
+      }
+    }
+
+    const table = anchor.closest('table');
+    if (table && styles.table) {
+      table.setAttribute('style', styles.table);
+    }
+
+    const block = anchor.parentElement;
+    if (block && block !== container && styles.block) {
+      block.setAttribute('style', styles.block);
+    }
+  }
+
+  private styleTextBlock(container: HTMLElement, text: string, style: string): void {
+    const element = this.findSmallestElementWithExactText(container, text);
+    if (!element || element === container) {
+      return;
+    }
+
+    element.setAttribute('style', style);
+  }
+
+  private findSmallestElementWithExactText(container: HTMLElement, text: string): HTMLElement | null {
+    const normalizedText = this.normalizeText(text);
+    let best: HTMLElement | null = null;
+    container.querySelectorAll<HTMLElement>('*').forEach(element => {
+      if (this.normalizeText(element.textContent ?? '') !== normalizedText) {
+        return;
+      }
+
+      if (!best || element.innerHTML.length < best.innerHTML.length) {
+        best = element;
+      }
+    });
+
+    return best;
   }
 
   private sanitizeEditableHtml(value: string): string {
@@ -975,7 +1194,7 @@ export class AppComponent {
   private withComplianceFooter(bodyHtml: string): string {
     const footer = [
       '<div data-signalminer-compliance="true" style="margin-top:18px;padding-top:10px;border-top:1px solid #e5e7eb;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:16px;color:#6b7280;">',
-      `<div><a href="${ZEXTRI_EMAIL_CONFIG.unsubscribeUrl}" style="color:#0f766e;text-decoration:none;">Unsubscribe</a> from future outreach.</div>`,
+      `<div><a href="${ZEXTRI_EMAIL_CONFIG.unsubscribeUrl}" style="color:#0f766e;text-decoration:none;">${EmailStrings.templates.shared.unsubscribeLabel}</a>${EmailStrings.templates.shared.unsubscribeSuffix}</div>`,
       '</div>'
     ].join('');
     const withoutFooter = bodyHtml.replace(/<div data-signalminer-compliance="true"[\s\S]*?<\/div>\s*<\/div>/gi, '').trim();

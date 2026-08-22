@@ -448,10 +448,10 @@ public sealed class DiscoveryTests
         Assert.Equal(ContactStatus.Contacted, lead.ContactStatus);
         var evt = Assert.Single(lead.OutreachEvents);
         Assert.Equal(OutreachEventType.ManualEmailSent, evt.Type);
-        Assert.Contains("Sent time:", evt.Body);
-        Assert.Contains("Delivery status: Submitted", evt.Body);
-        Assert.Contains("Provider message ID: provider-message-1", evt.Body);
-        Assert.Contains("Attachments: overview.pdf", evt.Body);
+        Assert.Contains(EmailStrings.SentTimeLabel, evt.Body);
+        Assert.Contains($"{EmailStrings.DeliveryStatusLabel} {EmailStrings.SubmittedStatus}", evt.Body);
+        Assert.Contains($"{EmailStrings.ProviderMessageIdLabel} provider-message-1", evt.Body);
+        Assert.Contains($"{EmailStrings.AttachmentsLabel} overview.pdf", evt.Body);
         Assert.Equal(ContactStatus.Contacted, evt.NewContactStatus);
         Assert.True(repository.WasSaved);
     }
@@ -465,7 +465,7 @@ public sealed class DiscoveryTests
         var exception = await Assert.ThrowsAsync<ManualEmailException>(() =>
             service.SendAsync(lead.Id, new SendManualEmailRequest(null, "Hello", "Body", null, null, null, null, []), CancellationToken.None));
 
-        Assert.Equal("Enter a valid recipient email address.", exception.Message);
+        Assert.Equal(EmailStrings.RecipientRequired, exception.Message);
     }
 
     [Fact]
@@ -487,7 +487,7 @@ public sealed class DiscoveryTests
                 new SendManualEmailRequest("other@example.com", "Hello", "Body", null, null, null, null, []),
                 CancellationToken.None));
 
-        Assert.Equal("Recipient email does not match the selected lead. Refresh the lead and try again.", exception.Message);
+        Assert.Equal(EmailStrings.RecipientMismatch, exception.Message);
         Assert.Empty(delivery.Messages);
         Assert.Equal(ContactStatus.NotContacted, lead.ContactStatus);
         Assert.False(repository.WasSaved);
@@ -536,12 +536,12 @@ public sealed class DiscoveryTests
             CancellationToken.None);
 
         var message = Assert.Single(delivery.Messages);
-        Assert.Equal("hello@zextri.com", message.ToEmail);
-        Assert.Equal("Zextri Test Inbox", message.ToName);
+        Assert.Equal(EmailStrings.SenderEmail, message.ToEmail);
+        Assert.Equal(EmailStrings.TestInboxName, message.ToName);
         Assert.Equal(ContactStatus.NotContacted, lead.ContactStatus);
         var evt = Assert.Single(lead.OutreachEvents);
         Assert.Equal(OutreachEventType.ManualEmailPrepared, evt.Type);
-        Assert.Contains("Test email: true", evt.Body);
+        Assert.Contains(EmailStrings.TestEmailLabel, evt.Body);
         Assert.Null(evt.NewContactStatus);
         Assert.True(repository.WasSaved);
     }
@@ -551,12 +551,17 @@ public sealed class DiscoveryTests
     {
         var templateRoot = FindRepositoryFile("ui", "signalminer-dashboard", "src", "assets", "email-templates");
         var manifestPath = Path.Combine(templateRoot, "manifest.json");
+        var emailStringsPath = FindRepositoryFile("ui", "signalminer-dashboard", "src", "app", "email-strings.ts");
+        var emailStrings = File.ReadAllText(emailStringsPath);
 
         Assert.True(File.Exists(manifestPath));
         var manifestJson = File.ReadAllText(manifestPath);
         Assert.Contains("\"quick-introduction\"", manifestJson);
         Assert.Contains("\"relationship-value\"", manifestJson);
         Assert.Contains("\"demo-follow-up\"", manifestJson);
+        Assert.DoesNotContain("Quick Introduction", manifestJson);
+        Assert.DoesNotContain("Relationship Value", manifestJson);
+        Assert.DoesNotContain("Demo Follow-up", manifestJson);
 
         var templateFiles = Directory.GetFiles(templateRoot, "template.html", SearchOption.AllDirectories);
         Assert.Equal(3, templateFiles.Length);
@@ -566,12 +571,21 @@ public sealed class DiscoveryTests
             Assert.Contains("{{sharedHeader}}", html);
             Assert.Contains("{{sharedSignature}}", html);
             Assert.Contains("{{sharedFooter}}", html);
-            Assert.Contains("Watch Demo", html);
-            Assert.Contains("Add to Chrome", html);
-            Assert.Contains("Get for Edge", html);
-            Assert.Contains("Available on the official Chrome and Microsoft Edge stores.", html);
+            Assert.Contains("{{ctaWatchDemo}}", html);
+            Assert.Contains("{{ctaChrome}}", html);
+            Assert.Contains("{{ctaEdge}}", html);
+            Assert.Contains("{{storeAvailability}}", html);
+            Assert.DoesNotContain("Watch Demo", html);
+            Assert.DoesNotContain("Add to Chrome", html);
+            Assert.DoesNotContain("Get for Microsoft Edge", html);
+            Assert.DoesNotContain("Available on the official Chrome and Microsoft Edge stores.", html);
             Assert.DoesNotContain("Zextri Growth Team", html);
         }
+
+        Assert.Contains("Watch Demo", emailStrings);
+        Assert.Contains("Add to Chrome", emailStrings);
+        Assert.Contains("Get for Microsoft Edge", emailStrings);
+        Assert.Contains("Available on the official Chrome and Microsoft Edge stores.", emailStrings);
     }
 
     [Fact]
@@ -583,18 +597,52 @@ public sealed class DiscoveryTests
         var footer = File.ReadAllText(Path.Combine(templateRoot, "shared", "email-footer.html"));
         var relationship = File.ReadAllText(Path.Combine(templateRoot, "relationship-value", "template.html"));
 
-        Assert.Contains("https://zextri.com/icons/zextri-192.png", header);
-        Assert.Contains("Zextri", header);
-        Assert.Contains("Bharat Bhushan", signature);
-        Assert.Contains("Founder, Zextri", signature);
+        Assert.Contains("{{logoUrl}}", header);
+        Assert.Contains("{{brandName}}", header);
+        Assert.Contains("{{senderName}}", signature);
+        Assert.Contains("{{senderTitle}}", signature);
         Assert.Contains("#2563eb", footer + relationship);
         Assert.Contains("#6D28D9", relationship);
         Assert.Contains("{{unsubscribeUrl}}", footer);
-        Assert.Contains("Visit Zextri", signature);
+        Assert.Contains("{{signatureWebsiteLabel}}", signature);
         Assert.DoesNotContain("{{businessInfo}}", footer);
         Assert.DoesNotContain("{{websiteUrl}}", footer);
         Assert.DoesNotContain("zextri.com", footer + signature);
         Assert.DoesNotContain("Zextri Growth Team", header + signature + footer + relationship);
+    }
+
+    [Fact]
+    public void EmailTemplates_KeepVisibleCopyAndUrlsInSharedEmailStrings()
+    {
+        var templateRoot = FindRepositoryFile("ui", "signalminer-dashboard", "src", "assets", "email-templates");
+        var emailStringsPath = FindRepositoryFile("ui", "signalminer-dashboard", "src", "app", "email-strings.ts");
+        var emailStrings = File.ReadAllText(emailStringsPath);
+        var files = Directory.GetFiles(templateRoot, "*.*", SearchOption.AllDirectories)
+            .Where(path => path.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
+                           path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        var combinedTemplates = string.Join(Environment.NewLine, files.Select(File.ReadAllText));
+        var centralizedValues = new[]
+        {
+            "Quick Introduction",
+            "Relationship Value",
+            "Demo Follow-up",
+            "Watch Demo",
+            "Add to Chrome",
+            "Get for Microsoft Edge",
+            "Available on the official Chrome and Microsoft Edge stores.",
+            "https://www.youtube.com/watch?v=Zo66nD5CMsc",
+            "https://www.youtube.com/watch?v=v_bxGZnQU5o",
+            "https://www.youtube.com/watch?v=LOfbyaqfk3w",
+            "https://chromewebstore.google.com/detail/zextri/jnfghdnpnebjlokdgfdfioncdpbmdiba",
+            "https://microsoftedge.microsoft.com/addons/detail/zextri/lopeokgklkpknnflmmgkaefnmphjielc"
+        };
+
+        foreach (var value in centralizedValues)
+        {
+            Assert.Contains(value, emailStrings);
+            Assert.DoesNotContain(value, combinedTemplates);
+        }
     }
 
     [Fact]
@@ -726,7 +774,7 @@ public sealed class DiscoveryTests
         public Task<EmailDeliveryResult> SendAsync(EmailMessage message, CancellationToken cancellationToken)
         {
             Messages.Add(message);
-            return Task.FromResult(new EmailDeliveryResult("Submitted", "provider-message-1", DateTimeOffset.Parse("2026-08-21T00:00:00Z")));
+            return Task.FromResult(new EmailDeliveryResult(EmailStrings.SubmittedStatus, "provider-message-1", DateTimeOffset.Parse("2026-08-21T00:00:00Z")));
         }
     }
 

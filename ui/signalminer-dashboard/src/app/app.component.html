@@ -162,7 +162,7 @@
         <nav class="detail-tabs" aria-label="Lead detail sections">
           <button type="button" class="tab-button" [class.active]="detailTab() === 'overview'" (click)="detailTab.set('overview')">Overview</button>
           <button type="button" class="tab-button" [class.active]="detailTab() === 'outreach'" (click)="detailTab.set('outreach')">Outreach</button>
-          <button type="button" class="tab-button" [class.active]="detailTab() === 'email'" (click)="detailTab.set('email')">Email</button>
+          <button type="button" class="tab-button" [class.active]="detailTab() === 'email'" (click)="detailTab.set('email')">{{ emailStrings.ui.labels.tabEmail }}</button>
         </nav>
 
         @if (detailTab() === 'overview') {
@@ -181,8 +181,8 @@
             <h3>Contact</h3>
             <div class="contact-grid">
               <div class="contact-card">
-                <span>Email</span>
-                <strong>{{ lead.publicEmail || 'No public email' }}</strong>
+                <span>{{ emailStrings.ui.labels.leadEmail }}</span>
+                <strong>{{ lead.publicEmail || emailStrings.ui.empty.noPublicEmail }}</strong>
               </div>
               @if (lead.company?.name) {
                 <div class="contact-card">
@@ -249,9 +249,9 @@
         } @else {
           <div class="email-workspace">
             <section class="email-composer">
-              <h3>Email</h3>
+              <h3>{{ emailStrings.ui.headings.composer }}</h3>
               <div class="recipient-card" aria-live="polite">
-                <span>Selected recipient</span>
+                <span>{{ emailStrings.ui.labels.selectedRecipient }}</span>
                 <strong>{{ selectedRecipientLabel() }}</strong>
               </div>
               @if (composerWarnings().length > 0) {
@@ -262,118 +262,118 @@
                 </div>
               }
               <details class="email-settings">
-                <summary>Email settings</summary>
+                <summary>{{ emailStrings.ui.headings.settings }}</summary>
                 <div class="sender-card">
-                  <span>Sender</span>
-                  <strong>Bharat from Zextri &lt;hello&#64;zextri.com&gt;</strong>
+                  <span>{{ emailStrings.ui.labels.sender }}</span>
+                  <strong>{{ emailStrings.sender.displayName }} &lt;{{ emailStrings.sender.email }}&gt;</strong>
                 </div>
                 <label>
-                  Reply-to
+                  {{ emailStrings.ui.labels.replyTo }}
                   <input [ngModel]="emailReplyTo()" readonly aria-readonly="true">
                 </label>
                 <label>
-                  CC
-                  <input [ngModel]="emailCc()" (ngModelChange)="emailCc.set($event)" placeholder="manager@yourcompany.com">
+                  {{ emailStrings.ui.labels.cc }}
+                  <input [ngModel]="emailCc()" (ngModelChange)="emailCc.set($event)" [placeholder]="emailStrings.ui.placeholders.cc">
                 </label>
                 <label>
-                  BCC
-                  <input [ngModel]="emailBcc()" (ngModelChange)="emailBcc.set($event)" placeholder="archive@yourcompany.com">
+                  {{ emailStrings.ui.labels.bcc }}
+                  <input [ngModel]="emailBcc()" (ngModelChange)="emailBcc.set($event)" [placeholder]="emailStrings.ui.placeholders.bcc">
                 </label>
                 <div class="signature-field">
-                  <span>Signature</span>
+                  <span>{{ emailStrings.ui.labels.signature }}</span>
                   <div class="editor-shell">
-                    <div class="editor-toolbar" aria-label="Signature formatting">
-                      <button type="button" class="tool-button" (click)="formatEmail('bold')" title="Bold">B</button>
-                      <button type="button" class="tool-button" (click)="formatEmail('italic')" title="Italic">I</button>
-                      <button type="button" class="tool-button" (click)="formatEmail('insertUnorderedList')" title="Bulleted list">*</button>
-                      <button type="button" class="tool-button" (click)="formatEmail('insertOrderedList')" title="Numbered list">1.</button>
-                      <button type="button" class="tool-button" (click)="addEmailLink()" title="Add link">Link</button>
+                    <div class="editor-toolbar" [attr.aria-label]="emailStrings.ui.toolbar.signatureFormatting">
+                      <button type="button" class="tool-button" (click)="formatEmail('bold')" [title]="emailStrings.ui.toolbar.bold">B</button>
+                      <button type="button" class="tool-button" (click)="formatEmail('italic')" [title]="emailStrings.ui.toolbar.italic">I</button>
+                      <button type="button" class="tool-button" (click)="formatEmail('insertUnorderedList')" [title]="emailStrings.ui.toolbar.bulletedList">*</button>
+                      <button type="button" class="tool-button" (click)="formatEmail('insertOrderedList')" [title]="emailStrings.ui.toolbar.numberedList">1.</button>
+                      <button type="button" class="tool-button" (click)="addEmailLink()" [title]="emailStrings.ui.toolbar.addLink">{{ emailStrings.ui.toolbar.linkLabel }}</button>
                     </div>
                     <div
                       class="signature-editor"
                       contenteditable="true"
-                      [innerHTML]="emailSignatureHtml()"
+                      [innerHTML]="emailSignatureEditorHtml()"
                       (input)="updateEmailSignature($event)"
-                      aria-label="Email signature editor">
+                      [attr.aria-label]="emailStrings.ui.aria.signatureEditor">
                     </div>
                   </div>
                 </div>
                 <label class="inline-check">
                   <input type="checkbox" [ngModel]="includeSignature()" (ngModelChange)="setIncludeSignature($event)">
-                  Include signature
+                  {{ emailStrings.ui.labels.includeSignature }}
                 </label>
                 <div class="email-settings-actions">
-                  <button type="button" class="secondary" (click)="saveEmailSettings()">Save settings</button>
-                  <button type="button" class="secondary" (click)="useZextriSignature()">Use Zextri signature</button>
-                  <button type="button" class="secondary" (click)="insertSignature()">Insert signature</button>
+                  <button type="button" class="secondary" (click)="saveEmailSettings()">{{ emailStrings.ui.buttons.saveSettings }}</button>
+                  <button type="button" class="secondary" (click)="useZextriSignature()">{{ emailStrings.ui.buttons.useZextriSignature }}</button>
+                  <button type="button" class="secondary" (click)="insertSignature()">{{ emailStrings.ui.buttons.insertSignature }}</button>
                 </div>
               </details>
               <label>
-                To
-                <input type="email" [ngModel]="emailTo()" (ngModelChange)="updateEmailTo($event)" placeholder="recipient@company.com">
+                {{ emailStrings.ui.labels.to }}
+                <input type="email" [ngModel]="emailTo()" (ngModelChange)="updateEmailTo($event)" [placeholder]="emailStrings.ui.placeholders.recipient">
               </label>
               <label>
-                Subject
-                <input [ngModel]="emailSubject()" (ngModelChange)="updateEmailSubject($event)" placeholder="Subject">
+                {{ emailStrings.ui.labels.subject }}
+                <input [ngModel]="emailSubject()" (ngModelChange)="updateEmailSubject($event)" [placeholder]="emailStrings.ui.placeholders.subject">
               </label>
               <label>
-                Email template
+                {{ emailStrings.ui.labels.template }}
                 <select [ngModel]="selectedEmailTemplateId()" (ngModelChange)="selectEmailTemplate($event)" [disabled]="emailTemplates().length === 0">
                   @for (template of emailTemplates(); track template.id) {
                     <option [value]="template.id">{{ template.name }} v{{ template.version }}</option>
                   }
                   @if (emailTemplates().length === 0) {
-                    <option value="">Loading templates...</option>
+                    <option value="">{{ emailStrings.ui.empty.loadingTemplates }}</option>
                   }
                 </select>
               </label>
               <div class="email-secondary-actions">
-                <button type="button" class="secondary" (click)="regenerateOpening()" [disabled]="emailTemplates().length === 0">Personalize</button>
-                <button type="button" class="secondary" (click)="previewEmail()" [disabled]="emailTemplates().length === 0">Preview</button>
-                <button type="button" class="secondary" (click)="resetToTemplate()" [disabled]="emailTemplates().length === 0">Reset to template</button>
-                <button type="button" class="secondary" (click)="sendTestEmail()" [disabled]="emailSending() || emailTemplates().length === 0">Send test email</button>
+                <button type="button" class="secondary" (click)="regenerateOpening()" [disabled]="emailTemplates().length === 0">{{ emailStrings.ui.buttons.personalize }}</button>
+                <button type="button" class="secondary" (click)="previewEmail()" [disabled]="emailTemplates().length === 0">{{ emailStrings.ui.buttons.preview }}</button>
+                <button type="button" class="secondary" (click)="resetToTemplate()" [disabled]="emailTemplates().length === 0">{{ emailStrings.ui.buttons.resetToTemplate }}</button>
+                <button type="button" class="secondary" (click)="sendTestEmail()" [disabled]="emailSending() || emailTemplates().length === 0">{{ emailStrings.ui.buttons.sendTestEmail }}</button>
               </div>
               <div class="editor-shell">
-                <div class="editor-toolbar" aria-label="Email formatting">
-                  <button type="button" class="tool-button" (click)="formatEmail('bold')" title="Bold">B</button>
-                  <button type="button" class="tool-button" (click)="formatEmail('italic')" title="Italic">I</button>
-                  <button type="button" class="tool-button" (click)="formatEmail('insertUnorderedList')" title="Bulleted list">*</button>
-                  <button type="button" class="tool-button" (click)="formatEmail('insertOrderedList')" title="Numbered list">1.</button>
-                  <button type="button" class="tool-button" (click)="addEmailLink()" title="Add link">Link</button>
+                <div class="editor-toolbar" [attr.aria-label]="emailStrings.ui.toolbar.emailFormatting">
+                  <button type="button" class="tool-button" (click)="formatEmail('bold')" [title]="emailStrings.ui.toolbar.bold">B</button>
+                  <button type="button" class="tool-button" (click)="formatEmail('italic')" [title]="emailStrings.ui.toolbar.italic">I</button>
+                  <button type="button" class="tool-button" (click)="formatEmail('insertUnorderedList')" [title]="emailStrings.ui.toolbar.bulletedList">*</button>
+                  <button type="button" class="tool-button" (click)="formatEmail('insertOrderedList')" [title]="emailStrings.ui.toolbar.numberedList">1.</button>
+                  <button type="button" class="tool-button" (click)="addEmailLink()" [title]="emailStrings.ui.toolbar.addLink">{{ emailStrings.ui.toolbar.linkLabel }}</button>
                 </div>
                 <div
                   class="email-editor"
                   contenteditable="true"
-                  [innerHTML]="emailBodyHtml()"
+                  [innerHTML]="emailBodyEditorHtml()"
                   (input)="updateEmailBody($event)"
-                  aria-label="Email message editor">
+                  [attr.aria-label]="emailStrings.ui.aria.messageEditor">
                 </div>
               </div>
               @if (emailPreview(); as preview) {
-                <section class="email-preview" aria-label="Resolved email preview">
+                <section class="email-preview" [attr.aria-label]="emailStrings.ui.aria.resolvedPreview">
                   <div>
-                    <span>To</span>
+                    <span>{{ emailStrings.ui.labels.previewTo }}</span>
                     <strong>{{ preview.recipient }}</strong>
                   </div>
                   <div>
-                    <span>From</span>
+                    <span>{{ emailStrings.ui.labels.previewFrom }}</span>
                     <strong>{{ preview.sender }}</strong>
                   </div>
                   <div>
-                    <span>Template</span>
+                    <span>{{ emailStrings.ui.labels.previewTemplate }}</span>
                     <strong>{{ preview.templateName }} v{{ preview.templateVersion }}</strong>
                   </div>
                   <div>
-                    <span>Subject</span>
+                    <span>{{ emailStrings.ui.labels.previewSubject }}</span>
                     <strong>{{ preview.subject }}</strong>
                   </div>
-                  <iframe class="preview-frame" title="Resolved email preview" sandbox="" [srcdoc]="preview.bodyHtml"></iframe>
+                  <iframe class="preview-frame" [title]="emailStrings.ui.aria.resolvedPreview" sandbox="" [srcdoc]="preview.bodyHtml"></iframe>
                 </section>
               }
-              <button type="button" (click)="sendEmail()" [disabled]="!canSendSelectedLead()">Send email</button>
+              <button type="button" (click)="sendEmail()" [disabled]="!canSendSelectedLead()">{{ emailStrings.ui.buttons.sendEmail }}</button>
             </section>
             <section class="detail-section templates-panel">
-              <h3>Email templates</h3>
+              <h3>{{ emailStrings.ui.headings.templates }}</h3>
               <div class="template-list">
                 @for (template of emailTemplates(); track template.id) {
                   <button type="button" class="template" (click)="selectEmailTemplate(template.id)">
