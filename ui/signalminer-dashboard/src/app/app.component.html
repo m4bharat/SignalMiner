@@ -245,6 +245,30 @@
               <button type="button" (click)="updateStatus('Contacted')">Contacted</button>
               <button type="button" (click)="updateStatus('DoNotContact')">DNC</button>
             </div>
+            <div class="email-log-card">
+              <div class="email-log-header">
+                <strong>{{ emailStrings.ui.labels.emailHistory }}</strong>
+              </div>
+              @if ((lead.emailLogs || []).length > 0) {
+                <div class="email-log-list">
+                  @for (entry of lead.emailLogs || []; track entry.occurredAt + entry.kind + entry.log) {
+                    <article class="email-log-entry">
+                      <div class="email-log-entry-header">
+                        <strong>{{ entry.kind }}</strong>
+                        <span>
+                          {{ entry.isTest ? emailStrings.ui.labels.preparedAt : emailStrings.ui.labels.sentAt }}
+                          {{ formatContactedAt(entry.occurredAt) }}
+                        </span>
+                      </div>
+                      <span class="email-log-template">{{ entry.template || emailStrings.ui.labels.templateNotRecorded }}</span>
+                      <pre>{{ entry.log }}</pre>
+                    </article>
+                  }
+                </div>
+              } @else {
+                <p>{{ emailStrings.ui.empty.noEmailLog }}</p>
+              }
+            </div>
           </section>
         } @else {
           <div class="email-workspace">

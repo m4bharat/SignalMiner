@@ -107,7 +107,7 @@ public sealed class ManualEmailService(
 
         if (!string.IsNullOrWhiteSpace(request.TemplateId))
         {
-            parts.Insert(2, $"{EmailStrings.TemplateLabel} {request.TemplateId.Trim()} v{request.TemplateVersion?.Trim() ?? EmailStrings.UnknownTemplateVersion}");
+            parts.Insert(2, $"{EmailStrings.TemplateLabel} {BuildTemplateSummary(request)}");
         }
 
         if (!string.IsNullOrWhiteSpace(deliveryResult.ProviderMessageId))
@@ -136,6 +136,19 @@ public sealed class ManualEmailService(
         }
 
         return string.Join(Environment.NewLine, parts);
+    }
+
+    private static string BuildTemplateSummary(SendManualEmailRequest request)
+    {
+        var templateId = request.TemplateId?.Trim() ?? string.Empty;
+        var templateName = request.TemplateName?.Trim();
+        var templateCategory = request.TemplateCategory?.Trim();
+        var templateVersion = request.TemplateVersion?.Trim() ?? EmailStrings.UnknownTemplateVersion;
+        var displayName = string.IsNullOrWhiteSpace(templateName) ? templateId : templateName;
+        var category = string.IsNullOrWhiteSpace(templateCategory) ? string.Empty : $" ({templateCategory})";
+        var idSuffix = string.IsNullOrWhiteSpace(templateName) ? string.Empty : $" [{templateId}]";
+
+        return $"{displayName}{category} v{templateVersion}{idSuffix}";
     }
 
     private static string? ParseOptionalEmail(string? value, string fieldName)

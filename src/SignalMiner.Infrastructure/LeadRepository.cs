@@ -20,6 +20,7 @@ public sealed class LeadRepository(SignalMinerDbContext db) : ILeadRepository
             .Include(x => x.Company)
             .Include(x => x.SourceProfiles)
             .Include(x => x.WebsiteSnapshots)
+            .Include(x => x.OutreachEvents)
             .AsNoTracking()
             .AsQueryable();
 

@@ -33,6 +33,7 @@ interface EmailPreview {
   warnings: string[];
   isTest: boolean;
   templateName: string;
+  templateCategory: string;
   templateVersion: string;
 }
 
@@ -73,6 +74,15 @@ interface Lead {
   notes?: string;
   company?: { name: string; domain?: string; summary?: string };
   sourceProfiles?: SourceProfile[];
+  emailLogs?: LeadEmailLog[];
+}
+
+interface LeadEmailLog {
+  occurredAt: string;
+  kind: string;
+  template?: string;
+  log: string;
+  isTest: boolean;
 }
 
 interface SourceProfile {
@@ -540,6 +550,8 @@ export class AppComponent {
     form.append('isTest', String(preview.isTest));
     form.append('templateId', this.selectedEmailTemplateId());
     form.append('templateVersion', preview.templateVersion);
+    form.append('templateName', preview.templateName);
+    form.append('templateCategory', preview.templateCategory);
     for (const file of this.emailAttachments()) {
       form.append('attachments', file, file.name);
     }
@@ -806,8 +818,21 @@ export class AppComponent {
       warnings: this.getDraftWarnings(lead),
       isTest,
       templateName: this.selectedEmailTemplateName() || EmailStrings.preview.customDraftName,
+      templateCategory: this.selectedOrDefaultTemplate()?.category ?? '',
       templateVersion: this.selectedEmailTemplateVersion() || EmailStrings.preview.draftVersion
     };
+  }
+
+  protected formatContactedAt(value: string): string {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return value;
+    }
+
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    }).format(date);
   }
 
   private defaultEmailCopy(): string {

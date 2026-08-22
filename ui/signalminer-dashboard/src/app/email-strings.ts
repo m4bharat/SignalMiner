@@ -77,6 +77,10 @@ export const EmailStrings = {
       selectedRecipient: 'Selected recipient',
       tabEmail: 'Email',
       leadEmail: 'Email',
+      emailHistory: 'Email history',
+      sentAt: 'Sent at',
+      preparedAt: 'Prepared at',
+      templateNotRecorded: 'Template not recorded',
       sender: 'Sender',
       replyTo: 'Reply-to',
       cc: 'CC',
@@ -127,7 +131,8 @@ export const EmailStrings = {
       loadingTemplates: 'Loading templates...',
       noLeadSelected: 'No lead selected',
       noEmail: 'no email',
-      noPublicEmail: 'No public email'
+      noPublicEmail: 'No public email',
+      noEmailLog: 'No email history yet.'
     },
     messages: {
       signatureApplied: 'Market-ready Zextri signature applied.',

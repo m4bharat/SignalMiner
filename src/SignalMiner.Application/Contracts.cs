@@ -39,7 +39,9 @@ public sealed record SendManualEmailRequest(
     IReadOnlyList<EmailAttachment> Attachments,
     bool IsTest = false,
     string? TemplateId = null,
-    string? TemplateVersion = null);
+    string? TemplateVersion = null,
+    string? TemplateName = null,
+    string? TemplateCategory = null);
 
 public sealed record EmailAttachment(string FileName, string ContentType, byte[] Content);
 

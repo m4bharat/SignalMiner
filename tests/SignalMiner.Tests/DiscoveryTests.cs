@@ -437,7 +437,11 @@ public sealed class DiscoveryTests
                 null,
                 null,
                 null,
-                [new EmailAttachment("overview.pdf", "application/pdf", [1, 2, 3])]),
+                [new EmailAttachment("overview.pdf", "application/pdf", [1, 2, 3])],
+                TemplateId: "quick-introduction",
+                TemplateVersion: "1.0.0",
+                TemplateName: "Quick Introduction",
+                TemplateCategory: "Cold outreach"),
             CancellationToken.None);
 
         Assert.NotNull(updated);
@@ -451,6 +455,7 @@ public sealed class DiscoveryTests
         Assert.Contains(EmailStrings.SentTimeLabel, evt.Body);
         Assert.Contains($"{EmailStrings.DeliveryStatusLabel} {EmailStrings.SubmittedStatus}", evt.Body);
         Assert.Contains($"{EmailStrings.ProviderMessageIdLabel} provider-message-1", evt.Body);
+        Assert.Contains($"{EmailStrings.TemplateLabel} Quick Introduction (Cold outreach) v1.0.0 [quick-introduction]", evt.Body);
         Assert.Contains($"{EmailStrings.AttachmentsLabel} overview.pdf", evt.Body);
         Assert.Equal(ContactStatus.Contacted, evt.NewContactStatus);
         Assert.True(repository.WasSaved);
@@ -532,7 +537,20 @@ public sealed class DiscoveryTests
 
         await service.SendAsync(
             lead.Id,
-            new SendManualEmailRequest("chris@dscturbo.com", "Preview", "Body", null, null, null, null, [], IsTest: true),
+            new SendManualEmailRequest(
+                "chris@dscturbo.com",
+                "Preview",
+                "Body",
+                null,
+                null,
+                null,
+                null,
+                [],
+                TemplateId: "post-demo",
+                TemplateVersion: "1.0.0",
+                TemplateName: "Post Demo Follow-up",
+                TemplateCategory: "Test outreach",
+                IsTest: true),
             CancellationToken.None);
 
         var message = Assert.Single(delivery.Messages);
@@ -542,6 +560,7 @@ public sealed class DiscoveryTests
         var evt = Assert.Single(lead.OutreachEvents);
         Assert.Equal(OutreachEventType.ManualEmailPrepared, evt.Type);
         Assert.Contains(EmailStrings.TestEmailLabel, evt.Body);
+        Assert.Contains($"{EmailStrings.TemplateLabel} Post Demo Follow-up (Test outreach) v1.0.0 [post-demo]", evt.Body);
         Assert.Null(evt.NewContactStatus);
         Assert.True(repository.WasSaved);
     }

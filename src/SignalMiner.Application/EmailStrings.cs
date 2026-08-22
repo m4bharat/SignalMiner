@@ -6,6 +6,8 @@ public static class EmailStrings
     public const string DefaultFromName = "SignalMiner";
     public const string TestInboxName = "Zextri Test Inbox";
     public const string SubmittedStatus = "Submitted";
+    public const string SentEmailKind = "Sent email";
+    public const string TestEmailKind = "Test email";
     public const string UnknownTemplateVersion = "unknown";
 
     public const string RecipientRequired = "Enter a valid recipient email address.";
