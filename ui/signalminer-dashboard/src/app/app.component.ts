@@ -146,11 +146,18 @@ interface ToastMessage {
 export class AppComponent {
   private readonly http = inject(HttpClient);
   private readonly apiBase = 'http://localhost:5126/api';
+  private readonly authStorageKey = 'signalminer.dashboard.authenticated';
+  private readonly dashboardUsername = 'admin@zextri.com';
+  private readonly dashboardPassword = 'zextri';
   private toastTimer: number | undefined;
   private sharedEmailTemplateParts: SharedEmailTemplateParts | null = null;
   private templateHtmlCache = new Map<string, string>();
   protected readonly emailStrings = EmailStrings;
 
+  protected readonly isAuthenticated = signal(false);
+  protected readonly loginEmail = signal('');
+  protected readonly loginPassword = signal('');
+  protected readonly loginError = signal('');
   protected readonly leads = signal<Lead[]>([]);
   protected readonly selectedLead = signal<Lead | null>(null);
   protected readonly total = signal(0);
@@ -210,6 +217,40 @@ export class AppComponent {
   protected readonly pageEnd = computed(() => Math.min(this.total(), this.page() * this.pageSize()));
 
   constructor() {
+    if (sessionStorage.getItem(this.authStorageKey) !== 'true') {
+      return;
+    }
+
+    this.isAuthenticated.set(true);
+    this.initializeDashboard();
+  }
+
+  protected login(): void {
+    const email = this.loginEmail().trim().toLowerCase();
+    const password = this.loginPassword();
+    if (email !== this.dashboardUsername || password !== this.dashboardPassword) {
+      this.loginError.set('Invalid email or password.');
+      return;
+    }
+
+    sessionStorage.setItem(this.authStorageKey, 'true');
+    this.loginPassword.set('');
+    this.loginError.set('');
+    this.isAuthenticated.set(true);
+    this.initializeDashboard();
+  }
+
+  protected logout(): void {
+    sessionStorage.removeItem(this.authStorageKey);
+    this.isAuthenticated.set(false);
+    this.leads.set([]);
+    this.selectedLead.set(null);
+    this.total.set(0);
+    this.emailPreview.set(null);
+    this.message.set('Manual-review-first lead discovery workspace');
+  }
+
+  private initializeDashboard(): void {
     this.loadEmailSettings();
     this.loadEmailTemplates();
     this.search();

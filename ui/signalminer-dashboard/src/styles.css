@@ -49,6 +49,44 @@ a {
   color: #855a00;
 }
 
+.login-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  background: #f7f8f3;
+  padding: 1rem;
+}
+
+.login-panel {
+  display: grid;
+  gap: 1.25rem;
+  width: min(100%, 24rem);
+  border: 1px solid #dfe5dc;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 20px 55px rgba(30, 42, 47, 0.12);
+  padding: 1.4rem;
+}
+
+.login-panel p {
+  margin-top: 0.25rem;
+  color: #667175;
+}
+
+.login-form {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.login-error {
+  border: 1px solid #efb2a3;
+  border-radius: 6px;
+  background: #fff2ef;
+  color: #8a2d1d;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.86rem;
+}
+
 .shell {
   min-height: 100vh;
 }
@@ -81,7 +119,7 @@ h1 {
 
 .discovery {
   display: grid;
-  grid-template-columns: 8rem minmax(16rem, 24rem) auto;
+  grid-template-columns: 8rem minmax(16rem, 24rem) auto auto;
   gap: 0.65rem;
 }
 

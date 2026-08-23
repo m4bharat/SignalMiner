@@ -1,3 +1,37 @@
+@if (!isAuthenticated()) {
+  <main class="login-shell">
+    <section class="login-panel">
+      <div>
+        <h1>SignalMiner</h1>
+        <p>Sign in to continue.</p>
+      </div>
+      <form class="login-form" (ngSubmit)="login()">
+        <label>
+          Email
+          <input
+            type="email"
+            [ngModel]="loginEmail()"
+            (ngModelChange)="loginEmail.set($event)"
+            name="loginEmail"
+            autocomplete="username">
+        </label>
+        <label>
+          Password
+          <input
+            type="password"
+            [ngModel]="loginPassword()"
+            (ngModelChange)="loginPassword.set($event)"
+            name="loginPassword"
+            autocomplete="current-password">
+        </label>
+        @if (loginError()) {
+          <p class="login-error">{{ loginError() }}</p>
+        }
+        <button type="submit">Sign in</button>
+      </form>
+    </section>
+  </main>
+} @else {
 <main class="shell">
   <section class="topbar">
     <div>
@@ -11,6 +45,7 @@
       </select>
       <input [ngModel]="discoveryQuery()" (ngModelChange)="discoveryQuery.set($event)" placeholder="Discovery query">
       <button type="button" (click)="discover()" [disabled]="loading()">Discover</button>
+      <button type="button" class="secondary" (click)="logout()">Logout</button>
     </div>
   </section>
 
@@ -473,3 +508,4 @@
     </div>
   }
 </main>
+}
