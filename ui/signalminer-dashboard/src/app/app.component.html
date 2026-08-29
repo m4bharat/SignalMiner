@@ -42,6 +42,7 @@
       <select [ngModel]="discoverySource()" (ngModelChange)="discoverySource.set($event)">
         <option value="GitHub">GitHub</option>
         <option value="X">X</option>
+        <option value="LinkedIn">LinkedIn</option>
       </select>
       <input [ngModel]="discoveryQuery()" (ngModelChange)="discoveryQuery.set($event)" placeholder="Discovery query">
       <button type="button" (click)="discover()" [disabled]="loading()">Discover</button>

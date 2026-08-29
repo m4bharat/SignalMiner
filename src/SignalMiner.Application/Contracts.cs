@@ -5,7 +5,8 @@ namespace SignalMiner.Application;
 public enum DiscoverySource
 {
     GitHub,
-    X
+    X,
+    LinkedIn
 }
 
 public sealed record DiscoverLeadsRequest(string Query, int Limit = 25, DiscoverySource Source = DiscoverySource.GitHub);
@@ -93,6 +94,10 @@ public sealed class DiscoveryRateLimitException(string message, DateTimeOffset? 
     public DateTimeOffset? RetryAfter { get; } = retryAfter;
 }
 
+public sealed class DiscoveryAuthenticationException(string message) : Exception(message);
+
+public sealed class DiscoverySourceUnavailableException(string message) : Exception(message);
+
 public sealed class WebsiteExtractionException(string message) : Exception(message);
 
 public sealed class ManualEmailException(string message, int statusCode = 400) : Exception(message)
@@ -115,6 +120,11 @@ public interface IGitHubDiscoveryService
 }
 
 public interface IXDiscoveryService
+{
+    Task<IReadOnlyList<Lead>> DiscoverAsync(DiscoverLeadsRequest request, CancellationToken cancellationToken);
+}
+
+public interface ILinkedInDiscoveryService
 {
     Task<IReadOnlyList<Lead>> DiscoverAsync(DiscoverLeadsRequest request, CancellationToken cancellationToken);
 }

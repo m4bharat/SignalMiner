@@ -6,6 +6,7 @@ public sealed class LeadWorkflow(
     ILeadRepository repository,
     IGitHubDiscoveryService gitHubDiscovery,
     IXDiscoveryService xDiscovery,
+    ILinkedInDiscoveryService linkedInDiscovery,
     IWebsiteExtractionService websiteExtraction,
     ILeadScoringService scoring) : ILeadWorkflow
 {
@@ -15,6 +16,7 @@ public sealed class LeadWorkflow(
         {
             DiscoverySource.GitHub => await gitHubDiscovery.DiscoverAsync(request, cancellationToken),
             DiscoverySource.X => await xDiscovery.DiscoverAsync(request, cancellationToken),
+            DiscoverySource.LinkedIn => await linkedInDiscovery.DiscoverAsync(request, cancellationToken),
             _ => throw new ArgumentOutOfRangeException(nameof(request), request.Source, "Unsupported discovery source.")
         };
 

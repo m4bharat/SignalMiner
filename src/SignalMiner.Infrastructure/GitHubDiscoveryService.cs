@@ -124,6 +124,12 @@ public sealed partial class GitHubDiscoveryService(HttpClient httpClient) : IGit
                 retryAfter);
         }
 
+        if (response.StatusCode is HttpStatusCode.Unauthorized)
+        {
+            throw new DiscoveryAuthenticationException(
+                "GitHub rejected the configured token. Replace GitHub:Token with a valid token, or clear it to use unauthenticated discovery.");
+        }
+
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<T>(cancellationToken);
     }

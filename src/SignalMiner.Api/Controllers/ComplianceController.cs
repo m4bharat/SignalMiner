@@ -16,7 +16,7 @@ public sealed class ComplianceController : ControllerBase
         {
             "GitHub discovery uses public GitHub API/profile signals.",
             "X discovery uses only public profile pages and public search-result pages.",
-            "No LinkedIn scraping; only LinkedIn URLs visible on allowed public websites/profiles are stored.",
+            "LinkedIn discovery stores URL-only leads from direct input or public search results; SignalMiner does not scrape LinkedIn.",
             "No automated messaging.",
             "No credential, cookie, or browser-session handling.",
             "No CAPTCHA bypass, proxy, or anti-detection logic.",

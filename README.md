@@ -22,7 +22,7 @@ SignalMiner is a compliant lead discovery and enrichment platform for finding po
 
 ## API Endpoints
 
-- `POST /api/leads/discover`: discover GitHub or X leads immediately. Omit `source` to use GitHub.
+- `POST /api/leads/discover`: discover GitHub, X, or LinkedIn URL-only leads immediately. Omit `source` to use GitHub.
 - `POST /api/leads/discover/jobs`: enqueue discovery through Hangfire.
 - `POST /api/leads/{id}/enrich`: enrich one lead from public website data.
 - `PATCH /api/leads/{id}/outreach-status`: update manual outreach status.
@@ -46,6 +46,12 @@ SignalMiner is a compliant lead discovery and enrichment platform for finding po
    ```
 
    Update `src/SignalMiner.Api/appsettings.json` and `src/SignalMiner.Worker/appsettings.json` if your local PostgreSQL credentials differ.
+
+   GitHub discovery works without a token at GitHub's unauthenticated rate limit. For higher limits, set a local environment variable before starting the API instead of committing a token:
+
+   ```powershell
+   $env:GitHub__Token='github_pat_...'
+   ```
 
 2. Restore and build:
 

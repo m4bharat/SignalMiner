@@ -23,13 +23,15 @@ public sealed class DiscoveryTests
     {
         var gitHub = new RecordingDiscoveryService(new Lead { DisplayName = "GitHub Lead", GitHubUrl = "https://github.com/alice" });
         var x = new RecordingDiscoveryService(new Lead { DisplayName = "X Lead", XUrl = "https://x.com/alice" });
+        var linkedIn = new RecordingDiscoveryService(new Lead { DisplayName = "LinkedIn Lead", LinkedInUrl = "https://www.linkedin.com/in/alice" });
         var repository = new RecordingRepository();
-        var workflow = new LeadWorkflow(repository, gitHub, x, new NoopWebsiteExtractionService(), new LeadScoringService());
+        var workflow = new LeadWorkflow(repository, gitHub, x, linkedIn, new NoopWebsiteExtractionService(), new LeadScoringService());
 
         var leads = await workflow.DiscoverAsync(new DiscoverLeadsRequest("founder AI"), CancellationToken.None);
 
         Assert.True(gitHub.WasCalled);
         Assert.False(x.WasCalled);
+        Assert.False(linkedIn.WasCalled);
         Assert.Single(leads);
         Assert.Equal(LeadStatus.NeedsManualReview, leads[0].Status);
         Assert.Single(repository.Added);
@@ -40,14 +42,34 @@ public sealed class DiscoveryTests
     {
         var gitHub = new RecordingDiscoveryService(new Lead { DisplayName = "GitHub Lead", GitHubUrl = "https://github.com/alice" });
         var x = new RecordingDiscoveryService(new Lead { DisplayName = "X Lead", XUrl = "https://x.com/alice" });
-        var workflow = new LeadWorkflow(new RecordingRepository(), gitHub, x, new NoopWebsiteExtractionService(), new LeadScoringService());
+        var linkedIn = new RecordingDiscoveryService(new Lead { DisplayName = "LinkedIn Lead", LinkedInUrl = "https://www.linkedin.com/in/alice" });
+        var workflow = new LeadWorkflow(new RecordingRepository(), gitHub, x, linkedIn, new NoopWebsiteExtractionService(), new LeadScoringService());
 
         var leads = await workflow.DiscoverAsync(new DiscoverLeadsRequest("founder AI", Source: DiscoverySource.X), CancellationToken.None);
 
         Assert.False(gitHub.WasCalled);
         Assert.True(x.WasCalled);
+        Assert.False(linkedIn.WasCalled);
         Assert.Single(leads);
         Assert.Equal("https://x.com/alice", leads[0].XUrl);
+        Assert.Equal(LeadStatus.NeedsManualReview, leads[0].Status);
+    }
+
+    [Fact]
+    public async Task LeadWorkflow_RoutesLinkedInSourceToLinkedInService()
+    {
+        var gitHub = new RecordingDiscoveryService(new Lead { DisplayName = "GitHub Lead", GitHubUrl = "https://github.com/alice" });
+        var x = new RecordingDiscoveryService(new Lead { DisplayName = "X Lead", XUrl = "https://x.com/alice" });
+        var linkedIn = new RecordingDiscoveryService(new Lead { DisplayName = "LinkedIn Lead", LinkedInUrl = "https://www.linkedin.com/in/alice" });
+        var workflow = new LeadWorkflow(new RecordingRepository(), gitHub, x, linkedIn, new NoopWebsiteExtractionService(), new LeadScoringService());
+
+        var leads = await workflow.DiscoverAsync(new DiscoverLeadsRequest("personal brand", Source: DiscoverySource.LinkedIn), CancellationToken.None);
+
+        Assert.False(gitHub.WasCalled);
+        Assert.False(x.WasCalled);
+        Assert.True(linkedIn.WasCalled);
+        Assert.Single(leads);
+        Assert.Equal("https://www.linkedin.com/in/alice", leads[0].LinkedInUrl);
         Assert.Equal(LeadStatus.NeedsManualReview, leads[0].Status);
     }
 
@@ -227,6 +249,96 @@ public sealed class DiscoveryTests
         Assert.Equal(LeadStatus.NeedsManualReview, lead.Status);
         Assert.Single(websiteExtraction.Calls);
         Assert.Contains("No public email found. Manual review required.", lead.Notes);
+    }
+
+    [Fact]
+    public async Task GitHubDiscoveryService_ReportsInvalidToken()
+    {
+        var handler = new StubHttpMessageHandler(_ =>
+            new HttpResponseMessage(HttpStatusCode.Unauthorized) { Content = new StringContent("{}") });
+        var service = new GitHubDiscoveryService(new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://api.github.com/")
+        });
+
+        var exception = await Assert.ThrowsAsync<DiscoveryAuthenticationException>(() =>
+            service.DiscoverAsync(new DiscoverLeadsRequest("personal brand"), CancellationToken.None));
+
+        Assert.Contains("GitHub rejected the configured token", exception.Message);
+    }
+
+    [Fact]
+    public async Task PublicProfileUrlDiscoveryService_CreatesLinkedInUrlOnlyLeadFromDirectUrl()
+    {
+        var service = new PublicProfileUrlDiscoveryService(new HttpClient(new StubHttpMessageHandler(_ =>
+            new HttpResponseMessage(HttpStatusCode.InternalServerError))));
+
+        var leads = await service.DiscoverAsync(
+            new DiscoverLeadsRequest("linkedin.com/in/jane-founder", 25, DiscoverySource.LinkedIn),
+            CancellationToken.None);
+
+        var lead = Assert.Single(leads);
+        Assert.Equal("Jane Founder", lead.DisplayName);
+        Assert.Equal("https://www.linkedin.com/in/jane-founder", lead.LinkedInUrl);
+        Assert.Null(lead.PublicEmail);
+        Assert.Null(lead.WebsiteUrl);
+        Assert.Contains("does not scrape LinkedIn", lead.Notes);
+        Assert.Equal(SourceKind.LinkedInProfileUrlOnly, Assert.Single(lead.SourceProfiles).Kind);
+    }
+
+    [Fact]
+    public async Task PublicProfileUrlDiscoveryService_ExtractsLinkedInUrlsFromPublicSearchResults()
+    {
+        const string searchHtml = """
+            <html><body>
+              <a href="/l/?uddg=https%3A%2F%2Fwww.linkedin.com%2Fin%2Fencoded-founder">Encoded Founder</a>
+              <a href="https://www.linkedin.com/company/acme-ai/">Acme AI</a>
+            </body></html>
+            """;
+        var handler = new StubHttpMessageHandler(_ =>
+            new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(searchHtml) });
+        var service = new PublicProfileUrlDiscoveryService(new HttpClient(handler));
+
+        var leads = await service.DiscoverAsync(
+            new DiscoverLeadsRequest("personal brand", 25, DiscoverySource.LinkedIn),
+            CancellationToken.None);
+
+        Assert.Equal(2, leads.Count);
+        Assert.Contains(leads, lead => lead.LinkedInUrl == "https://www.linkedin.com/in/encoded-founder");
+        Assert.Contains(leads, lead => lead.LinkedInUrl == "https://www.linkedin.com/company/acme-ai");
+        Assert.All(handler.RequestedUris, uri => Assert.DoesNotContain("linkedin.com", uri.Host, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task PublicProfileUrlDiscoveryService_ExtractsBingEncodedLinkedInUrls()
+    {
+        const string searchHtml = """
+            <html><body>
+              <a href="https://www.bing.com/ck/a?u=a1aHR0cHM6Ly93d3cubGlua2VkaW4uY29tL2luL2JpbmctZm91bmRlcg">Bing Founder</a>
+            </body></html>
+            """;
+        var handler = new StubHttpMessageHandler(_ =>
+            new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(searchHtml) });
+        var service = new PublicProfileUrlDiscoveryService(new HttpClient(handler));
+
+        var leads = await service.DiscoverAsync(
+            new DiscoverLeadsRequest("founder", 25, DiscoverySource.LinkedIn),
+            CancellationToken.None);
+
+        var lead = Assert.Single(leads);
+        Assert.Equal("https://www.linkedin.com/in/bing-founder", lead.LinkedInUrl);
+        Assert.All(handler.RequestedUris, uri => Assert.DoesNotContain("linkedin.com", uri.Host, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task PublicProfileUrlDiscoveryService_ReportsUnavailableSearchProviders()
+    {
+        var service = new PublicProfileUrlDiscoveryService(new HttpClient(new ThrowingHttpMessageHandler(new HttpRequestException("timeout"))));
+
+        var exception = await Assert.ThrowsAsync<DiscoverySourceUnavailableException>(() =>
+            service.DiscoverAsync(new DiscoverLeadsRequest("founder", 25, DiscoverySource.LinkedIn), CancellationToken.None));
+
+        Assert.Contains("could not reach public search-result providers", exception.Message);
     }
 
     [Fact]
@@ -690,7 +802,7 @@ public sealed class DiscoveryTests
         throw new DirectoryNotFoundException($"Could not find {Path.Combine(segments)}.");
     }
 
-    private sealed class RecordingDiscoveryService(params Lead[] leads) : IGitHubDiscoveryService, IXDiscoveryService
+    private sealed class RecordingDiscoveryService(params Lead[] leads) : IGitHubDiscoveryService, IXDiscoveryService, ILinkedInDiscoveryService
     {
         public bool WasCalled { get; private set; }
 
@@ -813,5 +925,11 @@ public sealed class DiscoveryTests
             RequestedUris.Add(request.RequestUri);
             return Task.FromResult(responder(request.RequestUri));
         }
+    }
+
+    private sealed class ThrowingHttpMessageHandler(Exception exception) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromException<HttpResponseMessage>(exception);
     }
 }

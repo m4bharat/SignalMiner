@@ -18,7 +18,7 @@ import { EmailStrings, EmailTemplateId, EmailTemplateStrings } from './email-str
 
 type ContactStatus = 'NotContacted' | 'ReadyForManualOutreach' | 'Contacted' | 'Replied' | 'NotInterested' | 'DoNotContact';
 type LeadStatus = 'New' | 'Enriched' | 'NeedsManualReview' | 'Qualified' | 'Disqualified' | 'Archived';
-type DiscoverySource = 'GitHub' | 'X';
+type DiscoverySource = 'GitHub' | 'X' | 'LinkedIn';
 type SourceKind = 'GitHub' | 'Website' | 'X' | 'LinkedInProfileUrlOnly' | 'Manual';
 type SourceFilter = '' | 'Imported' | SourceKind;
 type DetailTab = 'overview' | 'outreach' | 'email';
@@ -309,13 +309,42 @@ export class AppComponent {
     }).subscribe({
       next: leads => {
         this.message.set(`Discovered ${leads.length} ${this.discoverySource()} leads for manual review.`);
-        this.search();
+        this.showDiscoveredLeads();
+        this.leads.set(leads);
+        this.total.set(leads.length);
+        const firstLead = leads[0] ?? null;
+        if (firstLead) {
+          this.prepareLeadEmail(firstLead);
+        } else {
+          this.selectedLead.set(null);
+          this.emailTo.set('');
+        }
+        this.loading.set(false);
       },
       error: (error: HttpErrorResponse) => {
         this.message.set(error.error?.message || 'Discovery failed. Check API, PostgreSQL, and source rate limits.');
         this.loading.set(false);
       }
     });
+  }
+
+  private showDiscoveredLeads(): void {
+    this.query.set('');
+    this.minFitScore.set(null);
+    this.contactStatus.set('');
+    this.sourceFilter.set(this.discoverySourceFilter());
+    this.page.set(1);
+  }
+
+  private discoverySourceFilter(): SourceFilter {
+    switch (this.discoverySource()) {
+      case 'GitHub':
+        return 'GitHub';
+      case 'X':
+        return 'X';
+      case 'LinkedIn':
+        return 'LinkedInProfileUrlOnly';
+    }
   }
 
   protected selectImportFile(event: Event): void {

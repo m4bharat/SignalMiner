@@ -53,6 +53,14 @@ public sealed class LeadsController(
                 retryAfter = ex.RetryAfter
             });
         }
+        catch (DiscoveryAuthenticationException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (DiscoverySourceUnavailableException ex)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, new { message = ex.Message });
+        }
     }
 
     [HttpPost("{id:guid}/enrich")]

@@ -29,6 +29,12 @@ public static class ServiceCollectionExtensions
             client.DefaultRequestHeaders.UserAgent.ParseAdd("SignalMiner/0.1");
             client.DefaultRequestHeaders.Accept.ParseAdd("text/html,application/xhtml+xml");
         });
+        services.AddHttpClient<ILinkedInDiscoveryService, PublicProfileUrlDiscoveryService>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(10);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("SignalMiner/0.1");
+            client.DefaultRequestHeaders.Accept.ParseAdd("text/html,application/xhtml+xml");
+        });
 
         services.AddHttpClient<IGitHubDiscoveryService, GitHubDiscoveryService>((provider, client) =>
         {

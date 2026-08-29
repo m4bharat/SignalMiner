@@ -26,16 +26,25 @@ public sealed class LeadRepository(SignalMinerDbContext db) : ILeadRepository
 
         if (!string.IsNullOrWhiteSpace(request.Query))
         {
-            var q = request.Query.ToLower();
+            var rawQuery = request.Query.Trim();
+            var q = rawQuery.ToLower();
+            var hasLeadId = Guid.TryParse(rawQuery, out var leadId);
             query = query.Where(x =>
+                (hasLeadId && x.Id == leadId) ||
                 x.DisplayName.ToLower().Contains(q) ||
                 (x.RoleTitle != null && x.RoleTitle.ToLower().Contains(q)) ||
                 (x.Company != null && x.Company.Name.ToLower().Contains(q)) ||
                 (x.Company != null && x.Company.Domain != null && x.Company.Domain.ToLower().Contains(q)) ||
                 (x.PublicEmail != null && x.PublicEmail.ToLower().Contains(q)) ||
+                (x.GitHubUrl != null && x.GitHubUrl.ToLower().Contains(q)) ||
+                (x.XUrl != null && x.XUrl.ToLower().Contains(q)) ||
                 (x.LinkedInUrl != null && x.LinkedInUrl.ToLower().Contains(q)) ||
                 (x.WebsiteUrl != null && x.WebsiteUrl.ToLower().Contains(q)) ||
-                (x.Notes != null && x.Notes.ToLower().Contains(q)));
+                (x.Notes != null && x.Notes.ToLower().Contains(q)) ||
+                x.SourceProfiles.Any(profile =>
+                    profile.Url.ToLower().Contains(q) ||
+                    profile.PublicHandle.ToLower().Contains(q) ||
+                    (profile.Bio != null && profile.Bio.ToLower().Contains(q))));
         }
 
         if (request.MinFitScore is not null)
