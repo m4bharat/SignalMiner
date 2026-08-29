@@ -106,7 +106,8 @@ export const EmailStrings = {
       preview: 'Preview',
       resetToTemplate: 'Reset to template',
       sendTestEmail: 'Send test email',
-      sendEmail: 'Send email'
+      sendEmail: 'Send email',
+      sendSelectedEmail: 'Send selected'
     },
     placeholders: {
       cc: 'manager@yourcompany.com',
@@ -143,7 +144,8 @@ export const EmailStrings = {
       addSignatureFirst: 'Add a signature in email settings first.',
       savedSettingsLoadFailed: 'Saved email settings could not be loaded.',
       testEmailSentPrefix: 'Test email sent to',
-      emailSubmittedPrefix: 'Email submitted to'
+      emailSubmittedPrefix: 'Email submitted to',
+      bulkEmailSubmittedPrefix: 'Emails submitted to'
     },
     confirms: {
       unsavedDraftSwitch: 'You have an unsaved email draft. Switch contacts and replace the draft?',
@@ -159,6 +161,7 @@ export const EmailStrings = {
       selectedTemplateLoadFailedBody: 'The current draft was preserved because the template file could not be loaded.',
       emailNotReadyTitle: 'Email not ready',
       selectLeadBody: 'Select a lead before sending.',
+      selectBulkContactsBody: 'Select one or more contacts with saved email addresses.',
       draftBelongsToAnotherLeadBody: 'The draft belongs to another lead. Refresh the selected contact.',
       validRecipientBody: 'Enter a valid recipient email address.',
       missingLeadEmailBody: 'This lead does not have a saved email address.',

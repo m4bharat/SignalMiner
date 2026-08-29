@@ -1,7 +1,7 @@
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { forkJoin } from 'rxjs';
+import { firstValueFrom, forkJoin } from 'rxjs';
 import {
   buildSendEmailConfirmation,
   buildTestEmailConfirmation,
@@ -159,6 +159,7 @@ export class AppComponent {
   protected readonly loginPassword = signal('');
   protected readonly loginError = signal('');
   protected readonly leads = signal<Lead[]>([]);
+  protected readonly selectedLeadIds = signal<ReadonlySet<string>>(new Set<string>());
   protected readonly selectedLead = signal<Lead | null>(null);
   protected readonly total = signal(0);
   protected readonly query = signal('');
@@ -208,6 +209,9 @@ export class AppComponent {
   protected readonly toast = signal<ToastMessage | null>(null);
 
   protected readonly totalPages = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize())));
+  protected readonly selectedEmailLeads = computed(() =>
+    this.leads().filter(lead => this.selectedLeadIds().has(lead.id)));
+  protected readonly selectedEmailLeadCount = computed(() => this.selectedEmailLeads().length);
 
   protected readonly pageStart = computed(() => {
     if (this.total() === 0) return 0;
@@ -279,6 +283,7 @@ export class AppComponent {
       next: result => {
         this.leads.set(result.items);
         this.total.set(result.total);
+        this.pruneSelectedLeadIds(result.items);
         const firstLead = result.items[0] ?? null;
         if (firstLead) {
           this.prepareLeadEmail(firstLead);
@@ -312,6 +317,7 @@ export class AppComponent {
         this.showDiscoveredLeads();
         this.leads.set(leads);
         this.total.set(leads.length);
+        this.pruneSelectedLeadIds(leads);
         const firstLead = leads[0] ?? null;
         if (firstLead) {
           this.prepareLeadEmail(firstLead);
@@ -468,6 +474,41 @@ export class AppComponent {
     }
 
     this.prepareLeadEmail(lead);
+  }
+
+  protected toggleLeadSelection(lead: Lead, event: Event): void {
+    event.stopPropagation();
+    this.selectedLeadIds.update(ids => {
+      const next = new Set(ids);
+      if (next.has(lead.id)) {
+        next.delete(lead.id);
+      } else {
+        next.add(lead.id);
+      }
+
+      return next;
+    });
+  }
+
+  protected isLeadSelectedForEmail(lead: Lead): boolean {
+    return this.selectedLeadIds().has(lead.id);
+  }
+
+  protected canSendSelectedLeads(): boolean {
+    return this.selectedEmailLeadCount() > 0 && !this.emailSending();
+  }
+
+  protected canSendPrimaryEmail(): boolean {
+    return this.selectedEmailLeadCount() > 0
+      ? this.canSendSelectedLeads()
+      : this.canSendSelectedLead();
+  }
+
+  protected primaryEmailButtonLabel(): string {
+    const selectedCount = this.selectedEmailLeadCount();
+    return selectedCount > 0
+      ? `${EmailStrings.ui.buttons.sendSelectedEmail} (${selectedCount})`
+      : EmailStrings.ui.buttons.sendEmail;
   }
 
   private prepareLeadEmail(lead: Lead): void {
@@ -664,6 +705,80 @@ export class AppComponent {
     this.submitEmail(preview);
   }
 
+  protected sendPrimaryEmailAction(): void {
+    if (this.selectedEmailLeadCount() > 0) {
+      void this.sendSelectedEmails();
+      return;
+    }
+
+    this.sendEmail();
+  }
+
+  protected async sendSelectedEmails(): Promise<void> {
+    if (this.emailSending()) return;
+
+    const leads = this.selectedEmailLeads();
+    if (leads.length === 0) {
+      this.showToast('error', EmailStrings.ui.toasts.emailNotReadyTitle, EmailStrings.ui.toasts.selectBulkContactsBody);
+      return;
+    }
+
+    const previews: Array<{ lead: Lead; preview: EmailPreview }> = [];
+    for (const lead of leads) {
+      const preview = this.buildEmailPreview(false, true, lead);
+      if (!preview) {
+        return;
+      }
+
+      previews.push({ lead, preview });
+    }
+
+    const confirmed = window.confirm(buildSendEmailConfirmation({
+      leadSummary: `${previews.length} selected contacts`,
+      recipient: `${previews.length} separate emails: ${previews.map(item => item.preview.recipient).join(', ')}`,
+      sender: previews[0].preview.sender,
+      templateName: previews[0].preview.templateName,
+      templateVersion: previews[0].preview.templateVersion,
+      subject: previews[0].preview.subject,
+      bodyText: previews[0].preview.bodyText
+    }));
+    if (!confirmed) {
+      return;
+    }
+
+    this.loading.set(true);
+    this.emailSending.set(true);
+
+    const failures: string[] = [];
+    for (const item of previews) {
+      try {
+        const updated = await firstValueFrom(this.postEmail(item.lead, item.preview));
+        if (this.selectedLead()?.id === updated.id) {
+          this.selectedLead.set(updated);
+        }
+      } catch (error) {
+        failures.push(`${item.lead.displayName}: ${this.getErrorMessage(error as HttpErrorResponse, EmailStrings.ui.toasts.emailFailedBody)}`);
+      }
+    }
+
+    this.loading.set(false);
+    this.emailSending.set(false);
+
+    if (failures.length > 0) {
+      const message = `Sent ${previews.length - failures.length} of ${previews.length} selected emails. ${failures[0]}`;
+      this.message.set(message);
+      this.showToast('error', EmailStrings.ui.toasts.emailFailedTitle, message);
+    } else {
+      const message = `${EmailStrings.ui.messages.bulkEmailSubmittedPrefix} ${previews.length} contacts as separate emails.`;
+      this.message.set(message);
+      this.showToast('success', EmailStrings.ui.toasts.emailSentTitle, message);
+      this.selectedLeadIds.set(new Set<string>());
+      this.draftDirty.set(false);
+    }
+
+    this.search(false);
+  }
+
   private submitEmail(preview: EmailPreview): void {
     const lead = this.selectedLead();
     if (!lead) return;
@@ -672,24 +787,7 @@ export class AppComponent {
 
     this.loading.set(true);
     this.emailSending.set(true);
-    const form = new FormData();
-    form.append('toEmail', preview.recipient);
-    form.append('subject', preview.subject);
-    form.append('body', preview.bodyText);
-    form.append('bodyHtml', preview.bodyHtml);
-    form.append('replyTo', ZEXTRI_EMAIL_CONFIG.senderEmail);
-    if (this.emailCc().trim()) form.append('cc', this.emailCc().trim());
-    if (this.emailBcc().trim()) form.append('bcc', this.emailBcc().trim());
-    form.append('isTest', String(preview.isTest));
-    form.append('templateId', this.selectedEmailTemplateId());
-    form.append('templateVersion', preview.templateVersion);
-    form.append('templateName', preview.templateName);
-    form.append('templateCategory', preview.templateCategory);
-    for (const file of this.emailAttachments()) {
-      form.append('attachments', file, file.name);
-    }
-
-    this.http.post<Lead>(`${this.apiBase}/leads/${lead.id}/email`, form).subscribe({
+    this.postEmail(lead, preview).subscribe({
       next: updated => {
         this.selectedLead.set(updated);
         const successMessage = preview.isTest
@@ -712,6 +810,27 @@ export class AppComponent {
         this.emailSending.set(false);
       }
     });
+  }
+
+  private postEmail(lead: Lead, preview: EmailPreview) {
+    const form = new FormData();
+    form.append('toEmail', preview.recipient);
+    form.append('subject', preview.subject);
+    form.append('body', preview.bodyText);
+    form.append('bodyHtml', preview.bodyHtml);
+    form.append('replyTo', ZEXTRI_EMAIL_CONFIG.senderEmail);
+    if (this.emailCc().trim()) form.append('cc', this.emailCc().trim());
+    if (this.emailBcc().trim()) form.append('bcc', this.emailBcc().trim());
+    form.append('isTest', String(preview.isTest));
+    form.append('templateId', this.selectedEmailTemplateId());
+    form.append('templateVersion', preview.templateVersion);
+    form.append('templateName', preview.templateName);
+    form.append('templateCategory', preview.templateCategory);
+    for (const file of this.emailAttachments()) {
+      form.append('attachments', file, file.name);
+    }
+
+    return this.http.post<Lead>(`${this.apiBase}/leads/${lead.id}/email`, form);
   }
 
   protected dismissToast(): void {
@@ -896,20 +1015,22 @@ export class AppComponent {
     return preview?.warnings ?? this.getDraftWarnings(this.selectedLead());
   }
 
-  private buildEmailPreview(isTest: boolean, showFeedback = true): EmailPreview | null {
-    const lead = this.selectedLead();
+  private buildEmailPreview(isTest: boolean, showFeedback = true, previewLead?: Lead): EmailPreview | null {
+    const lead = previewLead ?? this.selectedLead();
     if (!lead) {
       if (showFeedback) this.showToast('error', EmailStrings.ui.toasts.emailNotReadyTitle, EmailStrings.ui.toasts.selectLeadBody);
       return null;
     }
 
-    if (this.activeEmailLeadId() !== lead.id) {
+    if (!previewLead && this.activeEmailLeadId() !== lead.id) {
       if (showFeedback) this.showToast('error', EmailStrings.ui.toasts.emailNotReadyTitle, EmailStrings.ui.toasts.draftBelongsToAnotherLeadBody);
       return null;
     }
 
     const leadEmail = lead.publicEmail?.trim() ?? '';
-    const requestedRecipient = isTest ? ZEXTRI_EMAIL_CONFIG.senderEmail : this.emailTo().trim();
+    const requestedRecipient = isTest
+      ? ZEXTRI_EMAIL_CONFIG.senderEmail
+      : (previewLead ? leadEmail : this.emailTo().trim());
     if (!this.isValidEmail(requestedRecipient)) {
       if (showFeedback) this.showToast('error', EmailStrings.ui.toasts.emailNotReadyTitle, EmailStrings.ui.toasts.validRecipientBody);
       return null;
@@ -928,7 +1049,7 @@ export class AppComponent {
     }
 
     const subject = this.resolveVariables(this.emailSubject(), lead, false).trim();
-    const bodyHtml = this.finalEmailBodyHtml();
+    const bodyHtml = this.finalEmailBodyHtml(lead);
     const bodyText = this.htmlToText(bodyHtml);
     const unresolvedVariables = this.findUnresolvedVariables(`${subject}\n${bodyText}`);
     const missingRequiredVariables = this.getMissingRequiredVariables(lead);
@@ -1032,7 +1153,7 @@ export class AppComponent {
 
     const warnings: string[] = [];
     const firstName = this.firstName(lead);
-    const bodyText = this.normalizeText(this.htmlToText(this.finalEmailBodyHtml()));
+    const bodyText = this.normalizeText(this.htmlToText(this.finalEmailBodyHtml(lead)));
     const subjectText = this.normalizeText(this.resolveVariables(this.emailSubject(), lead, false));
     const missingRequiredVariables = this.getMissingRequiredVariables(lead);
     const unresolvedVariables = this.findUnresolvedVariables(`${subjectText} ${bodyText}`);
@@ -1193,8 +1314,7 @@ export class AppComponent {
     }
   }
 
-  private finalEmailBodyHtml(): string {
-    const lead = this.selectedLead();
+  private finalEmailBodyHtml(lead = this.selectedLead()): string {
     const sanitizedBody = this.sanitizeEditableHtml(this.emailBodyHtml());
     const resolvedBody = lead
       ? this.resolveVariables(sanitizedBody, lead)
@@ -1208,6 +1328,11 @@ export class AppComponent {
       ? this.withDefaultSignature(resolvedBody)
       : this.removeSignature(resolvedBody);
     return this.withComplianceFooter(signedBody);
+  }
+
+  private pruneSelectedLeadIds(leads: Lead[]): void {
+    const visibleIds = new Set(leads.map(lead => lead.id));
+    this.selectedLeadIds.update(ids => new Set(Array.from(ids).filter(id => visibleIds.has(id))));
   }
 
   private ensureStyledTemplateEmail(bodyHtml: string): string {
