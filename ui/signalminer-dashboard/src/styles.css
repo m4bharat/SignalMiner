@@ -348,6 +348,14 @@ label {
   text-align: center;
 }
 
+.select-column span {
+  display: block;
+  margin-top: 0.2rem;
+  color: #59666a;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+}
+
 .select-column input {
   width: auto;
   cursor: pointer;

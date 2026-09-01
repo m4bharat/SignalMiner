@@ -192,6 +192,7 @@ export class AppComponent {
   protected readonly selectedEmailTemplateId = signal('');
   protected readonly selectedEmailTemplateVersion = signal('');
   protected readonly selectedEmailTemplateName = signal('');
+  private readonly activeEmailTemplateHtml = signal('');
   protected readonly importFile = signal<File | null>(null);
   protected readonly importResult = signal<LeadImportResult | null>(null);
   protected readonly manualContact = signal<ManualContactForm>({
@@ -209,9 +210,18 @@ export class AppComponent {
   protected readonly toast = signal<ToastMessage | null>(null);
 
   protected readonly totalPages = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize())));
+  protected readonly selectableEmailLeads = computed(() =>
+    this.leads().filter(lead => Boolean(lead.publicEmail)));
   protected readonly selectedEmailLeads = computed(() =>
     this.leads().filter(lead => this.selectedLeadIds().has(lead.id)));
   protected readonly selectedEmailLeadCount = computed(() => this.selectedEmailLeads().length);
+  protected readonly allPageEmailLeadsSelected = computed(() => {
+    const selectableLeads = this.selectableEmailLeads();
+    return selectableLeads.length > 0 &&
+      selectableLeads.every(lead => this.selectedLeadIds().has(lead.id));
+  });
+  protected readonly somePageEmailLeadsSelected = computed(() =>
+    this.selectedEmailLeadCount() > 0 && !this.allPageEmailLeadsSelected());
 
   protected readonly pageStart = computed(() => {
     if (this.total() === 0) return 0;
@@ -484,6 +494,23 @@ export class AppComponent {
         next.delete(lead.id);
       } else {
         next.add(lead.id);
+      }
+
+      return next;
+    });
+  }
+
+  protected togglePageLeadSelection(event: Event): void {
+    event.stopPropagation();
+    const shouldSelectAll = !this.allPageEmailLeadsSelected();
+    this.selectedLeadIds.update(ids => {
+      const next = new Set(ids);
+      for (const lead of this.selectableEmailLeads()) {
+        if (shouldSelectAll) {
+          next.add(lead.id);
+        } else {
+          next.delete(lead.id);
+        }
       }
 
       return next;
@@ -914,6 +941,7 @@ export class AppComponent {
     this.selectedEmailTemplateId.set(template.id);
     this.selectedEmailTemplateName.set(template.name);
     this.selectedEmailTemplateVersion.set(template.version);
+    this.activeEmailTemplateHtml.set(html);
     this.emailSubject.set(template.defaultSubject);
     this.setEmailBodyHtml(this.resolveDraftHtmlForEditor(this.composeEmailTemplateHtml(html)));
     this.emailPreview.set(null);
@@ -1049,7 +1077,7 @@ export class AppComponent {
     }
 
     const subject = this.resolveVariables(this.emailSubject(), lead, false).trim();
-    const bodyHtml = this.finalEmailBodyHtml(lead);
+    const bodyHtml = this.finalEmailBodyHtml(lead, this.bulkTemplateBodyHtml(previewLead));
     const bodyText = this.htmlToText(bodyHtml);
     const unresolvedVariables = this.findUnresolvedVariables(`${subject}\n${bodyText}`);
     const missingRequiredVariables = this.getMissingRequiredVariables(lead);
@@ -1314,8 +1342,8 @@ export class AppComponent {
     }
   }
 
-  private finalEmailBodyHtml(lead = this.selectedLead()): string {
-    const sanitizedBody = this.sanitizeEditableHtml(this.emailBodyHtml());
+  private finalEmailBodyHtml(lead = this.selectedLead(), bodyHtml = this.emailBodyHtml()): string {
+    const sanitizedBody = this.sanitizeEditableHtml(bodyHtml);
     const resolvedBody = lead
       ? this.resolveVariables(sanitizedBody, lead)
       : sanitizedBody;
@@ -1328,6 +1356,15 @@ export class AppComponent {
       ? this.withDefaultSignature(resolvedBody)
       : this.removeSignature(resolvedBody);
     return this.withComplianceFooter(signedBody);
+  }
+
+  private bulkTemplateBodyHtml(previewLead?: Lead): string | undefined {
+    const templateHtml = this.activeEmailTemplateHtml().trim();
+    if (!previewLead || !templateHtml) {
+      return undefined;
+    }
+
+    return this.composeEmailTemplateHtml(templateHtml);
   }
 
   private pruneSelectedLeadIds(leads: Lead[]): void {

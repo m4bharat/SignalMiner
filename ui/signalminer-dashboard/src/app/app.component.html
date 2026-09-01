@@ -185,7 +185,16 @@
       <table>
         <thead>
           <tr>
-            <th class="select-column">Email</th>
+            <th class="select-column">
+              <input
+                type="checkbox"
+                [checked]="allPageEmailLeadsSelected()"
+                [indeterminate]="somePageEmailLeadsSelected()"
+                [disabled]="selectableEmailLeads().length === 0 || emailSending()"
+                (click)="togglePageLeadSelection($event)"
+                aria-label="Select all contacts on this page for email">
+              <span>Email</span>
+            </th>
             <th>Lead</th>
             <th>Fit</th>
             <th>Contact</th>
