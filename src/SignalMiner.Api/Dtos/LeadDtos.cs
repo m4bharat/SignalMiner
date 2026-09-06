@@ -24,6 +24,21 @@ public sealed record LeadDto(
     IReadOnlyList<WebsiteSnapshotDto> WebsiteSnapshots,
     IReadOnlyList<LeadEmailLogDto> EmailLogs)
 {
+    public string? FirstName { get; init; }
+    public string? LastName { get; init; }
+    public int? Rank { get; init; }
+    public string? PriorityGroup { get; init; }
+    public decimal? OutreachFitScore { get; init; }
+    public string? ZextriSegment { get; init; }
+    public string? CountryUnverified { get; init; }
+    public string? PersonalizationAngle { get; init; }
+    public string? OutreachScoreRationale { get; init; }
+    public string? DataQualityFlags { get; init; }
+    public string? RecommendedAction { get; init; }
+    public int? OriginalFitScore { get; init; }
+    public int? SourceRow { get; init; }
+    public string? SourceSheet { get; init; }
+
     public static LeadDto From(Lead lead) => new(
         lead.Id,
         lead.DisplayName,
@@ -41,7 +56,23 @@ public sealed record LeadDto(
         lead.Company is null ? null : CompanyDto.From(lead.Company),
         lead.SourceProfiles.Select(SourceProfileDto.From).ToArray(),
         lead.WebsiteSnapshots.Select(WebsiteSnapshotDto.From).ToArray(),
-        LeadEmailLogDto.From(lead.OutreachEvents));
+        LeadEmailLogDto.From(lead.OutreachEvents))
+    {
+        FirstName = lead.FirstName,
+        LastName = lead.LastName,
+        Rank = lead.Rank,
+        PriorityGroup = lead.PriorityGroup,
+        OutreachFitScore = lead.OutreachFitScore,
+        ZextriSegment = lead.ZextriSegment,
+        CountryUnverified = lead.CountryUnverified,
+        PersonalizationAngle = lead.PersonalizationAngle,
+        OutreachScoreRationale = lead.OutreachScoreRationale,
+        DataQualityFlags = lead.DataQualityFlags,
+        RecommendedAction = lead.RecommendedAction,
+        OriginalFitScore = lead.OriginalFitScore,
+        SourceRow = lead.SourceRow,
+        SourceSheet = lead.SourceSheet
+    };
 }
 
 public sealed record CompanyDto(Guid Id, string Name, string? Domain, string? Summary, string[] Keywords)

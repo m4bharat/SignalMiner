@@ -20,6 +20,7 @@ public sealed class LeadScoringService : ILeadScoringService
             lead.DisplayName,
             lead.RoleTitle,
             lead.Notes,
+            lead.ZextriSegment,
             lead.Company?.Summary,
             string.Join(' ', lead.Company?.Keywords ?? []),
             string.Join(' ', lead.SourceProfiles.Select(profile => profile.Bio))

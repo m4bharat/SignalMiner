@@ -42,7 +42,7 @@ public sealed partial class PublicProfileUrlDiscoveryService(HttpClient httpClie
             trimmed = $"https://{trimmed}";
         }
 
-        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) || !IsLinkedInHost(uri.Host))
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") || !IsLinkedInHost(uri.Host))
         {
             return null;
         }
@@ -305,7 +305,7 @@ public sealed partial class PublicProfileUrlDiscoveryService(HttpClient httpClie
 
     private static bool IsLinkedInHost(string host) =>
         host.Equals("linkedin.com", StringComparison.OrdinalIgnoreCase) ||
-        host.Equals("www.linkedin.com", StringComparison.OrdinalIgnoreCase);
+        host.EndsWith(".linkedin.com", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsBlockedOrLimited(HttpStatusCode statusCode) =>
         statusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests;

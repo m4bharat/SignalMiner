@@ -89,6 +89,8 @@ SignalMiner can send one manually reviewed email at a time from the lead detail 
 
 Configure SMTP through `Email:Smtp` settings or environment variables before using **Send email**:
 
+Keep mailbox passwords in environment variables or an ignored `appsettings.Local.json` beside the API project. Local settings override the checked-in JSON; environment variables and command-line settings take precedence. Local configuration is excluded from published output. Never put real credentials in tracked settings files.
+
 ```powershell
 $env:Email__Smtp__Host='smtp.titan.email'
 $env:Email__Smtp__Port='465'
@@ -101,7 +103,25 @@ $env:Email__Smtp__Password='your-app-password-or-mailbox-password'
 
 Titan may require third-party email access to be enabled. If two-factor authentication is enabled, use a Titan application password.
 
-## Scoring Signals
+## Fresh database and workbook import
+
+Create a new, empty PostgreSQL database and configure the same `ConnectionStrings:SignalMiner` value for the API and worker (or set `ConnectionStrings__SignalMiner` for both). Start the API, then the worker. Startup creates the current application tables before initializing Hangfire. The project uses `EnsureCreated`; it does not migrate old databases or retain old table layouts.
+
+Upload `Zextri_Cleaned_Prioritized_Leads.xlsx` through **Import contacts** and preview before importing. The importer combines Ready 9plus, Verify Before Send, and Hold or Exclude using their `Outreach Fit /10` headers. Summary, Scoring Rules, and the repeated raw Source Data sheet are excluded. CSV/manual entry uses the same column names; historical header aliases and automatic score rescaling have been removed.
+
+Workbook assessment fields have dedicated columns. Company name/domain are stored in Companies, and each lead references its company. Import metadata is not duplicated in notes, company summaries or company keywords. `IsImported` identifies imported contacts. Workbook scores and rationales are kept separately from enrichment results, and recommended actions are stored as text.
+
+Imports create new leads in NeedsManualReview with the supplied outreach status. Duplicate lead IDs, emails or LinkedIn URLs are skipped, including on a repeat import. Imports do not update existing records. Preview and import report duplicate/skipped rows. Blank and literal `NULL` cells are stored as null. Original Fit Score is an integer from 0–100; Outreach Fit /10 is a decimal from 0–10.
+
+The dashboard displays priority, rank and outreach fit, with full assessment details in the lead panel. Ranked records appear in workbook order; unranked records follow by fit score. Companies, SourceProfiles, WebsiteSnapshots and OutreachEvents remain part of the current schema because discovery, enrichment and outreach use them.
+
+Imports validate mailbox syntax, contact statuses and score precision, and report the source worksheet on row errors. Equivalent LinkedIn URLs, including regional hosts, are normalized for duplicate checks. The app's DoNotContact status blocks actual email delivery; workbook recommendations remain informational text.
+
+## Validation before pushing
+
+Run `dotnet test SignalMiner.sln`, then run `npm run check`, `npm run build` and `npm audit` from `ui/signalminer-dashboard`. Check .NET dependencies with `dotnet list SignalMiner.sln package --vulnerable --include-transitive`. The GitHub validation workflow runs builds, tests and dependency audits on pushes and pull requests. The dashboard uses Angular's application builder; the unused webpack build chain has been removed.
+
+## Scoring signals
 
 SignalMiner scores leads from public data using founder/operator keywords, SaaS keywords, AI keywords, public LinkedIn/X URL presence, GitHub posting/repository activity, and public website quality.
 

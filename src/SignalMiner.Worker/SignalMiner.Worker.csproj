@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Update="appsettings.Local.json" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
     <ProjectReference Include="..\SignalMiner.Application\SignalMiner.Application.csproj" />
     <ProjectReference Include="..\SignalMiner.Infrastructure\SignalMiner.Infrastructure.csproj" />
   </ItemGroup>

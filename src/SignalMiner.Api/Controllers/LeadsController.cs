@@ -1,10 +1,8 @@
-using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
 using SignalMiner.Api.Dtos;
 using SignalMiner.Application;
 using SignalMiner.Domain;
-using SignalMiner.Infrastructure;
 
 namespace SignalMiner.Api.Controllers;
 
@@ -199,7 +197,6 @@ public sealed class LeadsController(
                 hasEmail,
                 hasLinkedIn,
                 hasWebsite,
-                null,
                 page <= 0 ? 1 : page,
                 pageSize <= 0 ? 25 : pageSize),
             cancellationToken);

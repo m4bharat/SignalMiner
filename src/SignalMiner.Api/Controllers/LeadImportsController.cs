@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using SignalMiner.Application;
+using System.Xml;
 
 namespace SignalMiner.Api.Controllers;
 
@@ -34,6 +35,10 @@ public sealed class LeadImportsController(ILeadImportService imports) : Controll
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex) when (ex is InvalidDataException or XmlException)
+        {
+            return BadRequest(new { message = "The workbook is damaged or is not a valid XLSX file." });
         }
     }
 }

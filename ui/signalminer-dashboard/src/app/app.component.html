@@ -137,16 +137,19 @@
           </div>
           @if (result.issues.length > 0) {
             <ul class="import-issues">
-              @for (issue of result.issues.slice(0, 3); track issue.rowNumber + issue.field) {
-                <li>Row {{ issue.rowNumber }}: {{ issue.field }} - {{ issue.message }}</li>
+              @for (issue of result.issues.slice(0, 3); track $index) {
+                <li>{{ issue.sourceSheet ? issue.sourceSheet + ', ' : '' }}Row {{ issue.rowNumber }}: {{ issue.field }} - {{ issue.message }}</li>
               }
             </ul>
           }
           <div class="import-preview">
-            @for (row of result.previewRows.slice(0, 4); track row.rowNumber) {
+            @for (row of result.previewRows.slice(0, 4); track $index) {
               <div>
                 <strong>{{ row.displayName }}</strong>
                 <span>{{ row.company || row.publicEmail }}</span>
+                @if (row.priorityGroup) { <span>{{ row.priorityGroup }}</span> }
+                @if (row.outreachFitScore != null) { <span>Outreach fit: {{ row.outreachFitScore }}/10</span> }
+                @if (row.recommendedAction) { <span>{{ row.recommendedAction }}</span> }
                 @if (row.isDuplicate) {
                   <em>{{ row.duplicateReason }}</em>
                 }
@@ -196,6 +199,8 @@
               <span>Email</span>
             </th>
             <th>Lead</th>
+            <th>Priority</th>
+            <th>Outreach /10</th>
             <th>Fit</th>
             <th>Contact</th>
             <th>Source</th>
@@ -208,7 +213,7 @@
                 <input
                   type="checkbox"
                   [checked]="isLeadSelectedForEmail(lead)"
-                  [disabled]="!lead.publicEmail || emailSending()"
+                  [disabled]="!canEmailLead(lead) || emailSending()"
                   (click)="toggleLeadSelection(lead, $event)"
                   [attr.aria-label]="'Select ' + lead.displayName + ' for email'">
               </td>
@@ -216,6 +221,8 @@
                 <strong>{{ lead.displayName }}</strong>
                 <span>{{ lead.company?.name || lead.roleTitle || 'Independent' }}</span>
               </td>
+              <td><span>{{ lead.priorityGroup || '—' }}</span>@if (lead.rank != null) { <span>Rank {{ lead.rank }}</span> }</td>
+              <td>{{ lead.outreachFitScore ?? '—' }}</td>
               <td><meter min="0" max="100" [value]="lead.fitScore"></meter>{{ lead.fitScore }}</td>
               <td>{{ lead.contactStatus }}</td>
               <td>
@@ -228,7 +235,7 @@
             </tr>
           } @empty {
             <tr>
-              <td colspan="5" class="empty">No leads yet. Run discovery or adjust filters.</td>
+              <td colspan="7" class="empty">No leads yet. Run discovery or adjust filters.</td>
             </tr>
           }
         </tbody>
@@ -306,6 +313,26 @@
             <h3>Fit reason</h3>
             <p>{{ lead.scoreRationale || 'No fit reason yet.' }}</p>
           </section>
+
+          @if (lead.priorityGroup || lead.outreachFitScore != null || lead.zextriSegment) {
+            <section class="detail-section">
+              <h3>Outreach assessment</h3>
+              <dl>
+                <dt>Priority group</dt><dd>{{ lead.priorityGroup || '—' }}</dd>
+                <dt>Rank</dt><dd>{{ lead.rank ?? '—' }}</dd>
+                <dt>Outreach fit /10</dt><dd>{{ lead.outreachFitScore ?? '—' }}</dd>
+                <dt>Original fit score</dt><dd>{{ lead.originalFitScore ?? '—' }}</dd>
+                <dt>Zextri segment</dt><dd>{{ lead.zextriSegment || '—' }}</dd>
+                <dt>Country (unverified)</dt><dd>{{ lead.countryUnverified || '—' }}</dd>
+                <dt>Company domain</dt><dd>{{ lead.company?.domain || '—' }}</dd>
+                <dt>Personalization angle</dt><dd>{{ lead.personalizationAngle || '—' }}</dd>
+                <dt>Outreach score rationale</dt><dd>{{ lead.outreachScoreRationale || '—' }}</dd>
+                <dt>Data quality flags</dt><dd>{{ lead.dataQualityFlags || 'None recorded' }}</dd>
+                <dt>Recommended action</dt><dd>{{ lead.recommendedAction || '—' }}</dd>
+                <dt>Source</dt><dd>{{ lead.sourceSheet || 'Imported file' }} · Row {{ lead.sourceRow ?? '—' }}</dd>
+              </dl>
+            </section>
+          }
 
           @if (lead.notes) {
             <section class="detail-section">

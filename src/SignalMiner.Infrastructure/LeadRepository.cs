@@ -41,6 +41,9 @@ public sealed class LeadRepository(SignalMinerDbContext db) : ILeadRepository
                 (x.LinkedInUrl != null && x.LinkedInUrl.ToLower().Contains(q)) ||
                 (x.WebsiteUrl != null && x.WebsiteUrl.ToLower().Contains(q)) ||
                 (x.Notes != null && x.Notes.ToLower().Contains(q)) ||
+                (x.ZextriSegment != null && x.ZextriSegment.ToLower().Contains(q)) ||
+                (x.PriorityGroup != null && x.PriorityGroup.ToLower().Contains(q)) ||
+                (x.CountryUnverified != null && x.CountryUnverified.ToLower().Contains(q)) ||
                 x.SourceProfiles.Any(profile =>
                     profile.Url.ToLower().Contains(q) ||
                     profile.PublicHandle.ToLower().Contains(q) ||
@@ -69,7 +72,7 @@ public sealed class LeadRepository(SignalMinerDbContext db) : ILeadRepository
 
         if (request.ImportedOnly == true)
         {
-            query = query.Where(x => x.Notes != null && x.Notes.Contains("Imported from curated launch contacts file"));
+            query = query.Where(x => x.IsImported);
         }
 
         if (request.HasEmail is not null)
@@ -97,7 +100,9 @@ public sealed class LeadRepository(SignalMinerDbContext db) : ILeadRepository
         var page = Math.Max(1, request.Page);
         var pageSize = Math.Clamp(request.PageSize, 1, 100);
         var items = await query
-            .OrderByDescending(x => x.FitScore)
+            .OrderBy(x => x.Rank == null)
+            .ThenBy(x => x.Rank)
+            .ThenByDescending(x => x.FitScore)
             .ThenByDescending(x => x.UpdatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -107,10 +112,12 @@ public sealed class LeadRepository(SignalMinerDbContext db) : ILeadRepository
     }
 
     public async Task<IReadOnlySet<string>> FindExistingImportKeysAsync(
+        IEnumerable<Guid> leadIds,
         IEnumerable<string> emails,
         IEnumerable<string> linkedInUrls,
         CancellationToken cancellationToken)
     {
+        var idSet = leadIds.Distinct().ToArray();
         var emailSet = emails
             .Where(email => !string.IsNullOrWhiteSpace(email))
             .Select(email => email.Trim().ToLower())
@@ -122,7 +129,7 @@ public sealed class LeadRepository(SignalMinerDbContext db) : ILeadRepository
             .Distinct()
             .ToArray();
 
-        if (emailSet.Length == 0 && linkedInSet.Length == 0)
+        if (idSet.Length == 0 && emailSet.Length == 0 && linkedInSet.Length == 0)
         {
             return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         }
@@ -130,14 +137,16 @@ public sealed class LeadRepository(SignalMinerDbContext db) : ILeadRepository
         var matches = await db.Leads
             .AsNoTracking()
             .Where(lead =>
+                idSet.Contains(lead.Id) ||
                 (lead.PublicEmail != null && emailSet.Contains(lead.PublicEmail.ToLower())) ||
                 (lead.LinkedInUrl != null && linkedInSet.Contains(lead.LinkedInUrl.ToLower())))
-            .Select(lead => new { lead.PublicEmail, lead.LinkedInUrl })
+            .Select(lead => new { lead.Id, lead.PublicEmail, lead.LinkedInUrl })
             .ToArrayAsync(cancellationToken);
 
         var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var match in matches)
         {
+            keys.Add($"id:{match.Id}");
             if (!string.IsNullOrWhiteSpace(match.PublicEmail))
             {
                 keys.Add($"email:{match.PublicEmail.Trim().ToLower()}");

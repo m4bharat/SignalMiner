@@ -21,7 +21,6 @@ public sealed record LeadSearchRequest(
     bool? HasEmail,
     bool? HasLinkedIn,
     bool? HasWebsite,
-    string[]? Keywords,
     int Page = 1,
     int PageSize = 5);
 
@@ -74,7 +73,7 @@ public sealed record LeadImportResult(
     IReadOnlyList<LeadImportIssue> Issues,
     IReadOnlyList<LeadImportPreviewRow> PreviewRows);
 
-public sealed record LeadImportIssue(int RowNumber, string Field, string Message);
+public sealed record LeadImportIssue(int RowNumber, string Field, string Message, string? SourceSheet = null);
 
 public sealed record LeadImportPreviewRow(
     int RowNumber,
@@ -87,7 +86,15 @@ public sealed record LeadImportPreviewRow(
     int FitScore,
     ContactStatus ContactStatus,
     bool IsDuplicate,
-    string? DuplicateReason);
+    string? DuplicateReason)
+{
+    public int? Rank { get; init; }
+    public string? PriorityGroup { get; init; }
+    public decimal? OutreachFitScore { get; init; }
+    public string? DataQualityFlags { get; init; }
+    public string? RecommendedAction { get; init; }
+    public string? SourceSheet { get; init; }
+}
 
 public sealed class DiscoveryRateLimitException(string message, DateTimeOffset? retryAfter = null) : Exception(message)
 {
@@ -109,7 +116,7 @@ public interface ILeadRepository
 {
     Task<Lead?> GetAsync(Guid id, CancellationToken cancellationToken);
     Task<LeadSearchResult> SearchAsync(LeadSearchRequest request, CancellationToken cancellationToken);
-    Task<IReadOnlySet<string>> FindExistingImportKeysAsync(IEnumerable<string> emails, IEnumerable<string> linkedInUrls, CancellationToken cancellationToken);
+    Task<IReadOnlySet<string>> FindExistingImportKeysAsync(IEnumerable<Guid> leadIds, IEnumerable<string> emails, IEnumerable<string> linkedInUrls, CancellationToken cancellationToken);
     Task AddRangeAsync(IEnumerable<Lead> leads, CancellationToken cancellationToken);
     Task SaveChangesAsync(CancellationToken cancellationToken);
 }

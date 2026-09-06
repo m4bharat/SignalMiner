@@ -7,3 +7,6 @@ dist/
 .angular/
 *.user
 *.log
+.tmp/
+artifacts/
+appsettings.Local.json

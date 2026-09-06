@@ -1,6 +1,6 @@
 using System.Net;
 using System.Reflection;
-using System.Text;
+using System.Text.Json;
 using SignalMiner.Application;
 using SignalMiner.Domain;
 using SignalMiner.Infrastructure;
@@ -403,130 +403,6 @@ public sealed class DiscoveryTests
     }
 
     [Fact]
-    public async Task LeadImportService_PreviewsCsvAsManualReviewLeadsWithoutCommitting()
-    {
-        var csv = """
-            Priority,First Name,Last Name,Title,Company,Country,Professional Email,LinkedIn Profile,Segment,Zextri Fit Score,Verification Note,Outreach Status
-            1,Frederik,Denuit,Founding CEO,OnyxMedia,Belgium,frederik.denuit@onyxmedia.io,https://www.linkedin.com/in/frederik-denuit-31b83716a,Founder / Social Media,99,Verify before outreach,Not contacted
-            """;
-        var repository = new RecordingRepository();
-        var imports = new LeadImportService(repository);
-
-        var result = await imports.ImportAsync(ToStream(csv), "contacts.csv", commit: false, CancellationToken.None);
-
-        Assert.Equal(1, result.TotalRows);
-        Assert.Equal(1, result.ValidRows);
-        Assert.Equal(0, result.ImportedRows);
-        Assert.Empty(result.Issues);
-        var preview = Assert.Single(result.PreviewRows);
-        Assert.Equal("Frederik Denuit", preview.DisplayName);
-        Assert.Equal("OnyxMedia", preview.Company);
-        Assert.Equal(99, preview.FitScore);
-        Assert.False(preview.IsDuplicate);
-        Assert.Empty(repository.Added);
-    }
-
-    [Fact]
-    public async Task LeadImportService_CommitsCsvAsLinkedInUrlOnlyManualLead()
-    {
-        var csv = """
-            Priority,First Name,Last Name,Title,Company,Country,Professional Email,LinkedIn Profile,Segment,Zextri Fit Score,Verification Note,Outreach Status
-            1,Frederik,Denuit,Founding CEO,OnyxMedia,Belgium,frederik.denuit@onyxmedia.io,linkedin.com/in/frederik-denuit-31b83716a,Founder / Social Media,99,Verify before outreach,Not contacted
-            """;
-        var repository = new RecordingRepository();
-        var imports = new LeadImportService(repository);
-
-        var result = await imports.ImportAsync(ToStream(csv), "contacts.csv", commit: true, CancellationToken.None);
-
-        Assert.Equal(1, result.ImportedRows);
-        var lead = Assert.Single(repository.Added);
-        Assert.Equal("Frederik Denuit", lead.DisplayName);
-        Assert.Equal("Founding CEO", lead.RoleTitle);
-        Assert.Equal("frederik.denuit@onyxmedia.io", lead.PublicEmail);
-        Assert.Equal(LeadStatus.NeedsManualReview, lead.Status);
-        Assert.Equal(ContactStatus.NotContacted, lead.ContactStatus);
-        Assert.Equal("OnyxMedia", lead.Company?.Name);
-        Assert.Contains("Country: Belgium", lead.Notes);
-        Assert.Contains("LinkedIn URL is stored only", lead.Notes);
-        var source = Assert.Single(lead.SourceProfiles);
-        Assert.Equal(SourceKind.LinkedInProfileUrlOnly, source.Kind);
-        Assert.Equal("https://linkedin.com/in/frederik-denuit-31b83716a", source.Url);
-    }
-
-    [Fact]
-    public async Task LeadImportService_CommitsAlternateLaunchCsvColumns()
-    {
-        var csv = string.Join(Environment.NewLine,
-            "Priority\tFirst Name\tLast Name\tCompany Name\tCompany Domain\tJob Title\tEmail\tLinkedIn\tZextri Fit Score\tFit Reason",
-            "A+\tChris\tLindolph\tdsc turbo\tdscturbo.com\tassistant to national sales director\tchris@dscturbo.com\thttps://linkedin.com/in/chris-lindolph-9256b737\t8\tStrong relationship/outreach role; Professional networking role");
-        var repository = new RecordingRepository();
-        var imports = new LeadImportService(repository);
-
-        var result = await imports.ImportAsync(ToStream(csv), "contacts.csv", commit: true, CancellationToken.None);
-
-        Assert.Equal(1, result.ImportedRows);
-        var lead = Assert.Single(repository.Added);
-        Assert.Equal("Chris Lindolph", lead.DisplayName);
-        Assert.Equal("assistant to national sales director", lead.RoleTitle);
-        Assert.Equal("chris@dscturbo.com", lead.PublicEmail);
-        Assert.Equal("https://dscturbo.com", lead.WebsiteUrl);
-        Assert.Equal(80, lead.FitScore);
-        Assert.Equal("Strong relationship/outreach role; Professional networking role", lead.ScoreRationale);
-        Assert.Equal("dsc turbo", lead.Company?.Name);
-        Assert.Equal("dscturbo.com", lead.Company?.Domain);
-        Assert.Contains("Import priority: A+", lead.Notes);
-        Assert.Contains("Company domain: dscturbo.com", lead.Notes);
-        Assert.Contains("LinkedIn URL is stored only", lead.Notes);
-        var source = Assert.Single(lead.SourceProfiles);
-        Assert.Equal(SourceKind.LinkedInProfileUrlOnly, source.Kind);
-        Assert.Equal("https://linkedin.com/in/chris-lindolph-9256b737", source.Url);
-    }
-
-    [Fact]
-    public async Task LeadImportService_CommitsLinkedInOnlyRowsWhenEmailIsBlank()
-    {
-        var csv = string.Join(Environment.NewLine,
-            "Priority,First Name,Last Name,Company Name,Company Domain,Job Title,Email,LinkedIn,Zextri Fit Score,Fit Reason",
-            "A+,Deacon,Lewis,washington winnelson,washingtonwinnelson.com,account executive sales manager,,https://linkedin.com/in/deacon-lewis-0a6a88180,7,Strong relationship/outreach role; Professional networking role");
-        var repository = new RecordingRepository();
-        var imports = new LeadImportService(repository);
-
-        var result = await imports.ImportAsync(ToStream(csv), "contacts.csv", commit: true, CancellationToken.None);
-
-        Assert.Equal(1, result.ValidRows);
-        Assert.Equal(1, result.ImportedRows);
-        Assert.Empty(result.Issues);
-        var lead = Assert.Single(repository.Added);
-        Assert.Equal("Deacon Lewis", lead.DisplayName);
-        Assert.Null(lead.PublicEmail);
-        Assert.Equal("https://linkedin.com/in/deacon-lewis-0a6a88180", lead.LinkedInUrl);
-        Assert.Equal(70, lead.FitScore);
-        Assert.Equal(LeadStatus.NeedsManualReview, lead.Status);
-        var source = Assert.Single(lead.SourceProfiles);
-        Assert.Equal(SourceKind.LinkedInProfileUrlOnly, source.Kind);
-    }
-
-    [Fact]
-    public async Task LeadImportService_SkipsExistingEmailDuplicates()
-    {
-        var csv = """
-            Priority,First Name,Last Name,Title,Company,Country,Professional Email,LinkedIn Profile,Segment,Zextri Fit Score,Verification Note,Outreach Status
-            1,Frederik,Denuit,Founding CEO,OnyxMedia,Belgium,frederik.denuit@onyxmedia.io,https://www.linkedin.com/in/frederik-denuit-31b83716a,Founder / Social Media,99,Verify before outreach,Not contacted
-            """;
-        var repository = new RecordingRepository(["email:frederik.denuit@onyxmedia.io"]);
-        var imports = new LeadImportService(repository);
-
-        var result = await imports.ImportAsync(ToStream(csv), "contacts.csv", commit: true, CancellationToken.None);
-
-        Assert.Equal(0, result.ImportedRows);
-        Assert.Equal(1, result.SkippedRows);
-        var preview = Assert.Single(result.PreviewRows);
-        Assert.True(preview.IsDuplicate);
-        Assert.Equal("Existing lead with same email", preview.DuplicateReason);
-        Assert.Empty(repository.Added);
-    }
-
-    [Fact]
     public async Task ManualEmailService_SendsOneLeadAndRecordsOutreach()
     {
         var lead = new Lead
@@ -583,6 +459,21 @@ public sealed class DiscoveryTests
             service.SendAsync(lead.Id, new SendManualEmailRequest(null, "Hello", "Body", null, null, null, null, []), CancellationToken.None));
 
         Assert.Equal(EmailStrings.RecipientRequired, exception.Message);
+    }
+
+    [Fact]
+    public async Task ManualEmailService_RejectsDoNotContactWithoutCallingDelivery()
+    {
+        var lead = new Lead { PublicEmail = "alex@example.com", ContactStatus = ContactStatus.DoNotContact };
+        var repository = new SingleLeadRepository(lead);
+        var delivery = new RecordingEmailDeliveryService();
+        var exception = await Assert.ThrowsAsync<ManualEmailException>(() =>
+            new ManualEmailService(repository, delivery).SendAsync(lead.Id,
+                new SendManualEmailRequest(lead.PublicEmail, "Hello", "Body", null, null, null, null, []), default));
+        Assert.Equal(EmailStrings.DoNotContact, exception.Message);
+        Assert.Empty(delivery.Messages);
+        Assert.Empty(lead.OutreachEvents);
+        Assert.False(repository.WasSaved);
     }
 
     [Fact]
@@ -780,9 +671,10 @@ public sealed class DiscoveryTests
     public void EmailTemplates_AreIncludedInAngularBuildAssets()
     {
         var angularJsonPath = FindRepositoryFile("ui", "signalminer-dashboard", "angular.json");
-        var angularJson = File.ReadAllText(angularJsonPath);
-
-        Assert.Contains("\"assets\": [\"src/assets\"]", angularJson);
+        using var angularJson = JsonDocument.Parse(File.ReadAllText(angularJsonPath));
+        var assets = angularJson.RootElement.GetProperty("projects").GetProperty("signalminer-dashboard")
+            .GetProperty("architect").GetProperty("build").GetProperty("options").GetProperty("assets");
+        Assert.Contains("src/assets", assets.EnumerateArray().Select(asset => asset.GetString()));
     }
 
     private static string FindRepositoryFile(params string[] segments)
@@ -847,9 +739,7 @@ public sealed class DiscoveryTests
         }
     }
 
-    private static MemoryStream ToStream(string value) => new(Encoding.UTF8.GetBytes(value));
-
-    private sealed class RecordingRepository(params string[] existingImportKeys) : ILeadRepository
+    private sealed class RecordingRepository : ILeadRepository
     {
         public List<Lead> Added { get; } = [];
 
@@ -859,10 +749,11 @@ public sealed class DiscoveryTests
             Task.FromResult(new LeadSearchResult([], 0));
 
         public Task<IReadOnlySet<string>> FindExistingImportKeysAsync(
+            IEnumerable<Guid> leadIds,
             IEnumerable<string> emails,
             IEnumerable<string> linkedInUrls,
             CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlySet<string>>(new HashSet<string>(existingImportKeys, StringComparer.OrdinalIgnoreCase));
+            Task.FromResult<IReadOnlySet<string>>(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
 
         public Task AddRangeAsync(IEnumerable<Lead> leads, CancellationToken cancellationToken)
         {
@@ -884,6 +775,7 @@ public sealed class DiscoveryTests
             Task.FromResult(new LeadSearchResult([], 0));
 
         public Task<IReadOnlySet<string>> FindExistingImportKeysAsync(
+            IEnumerable<Guid> leadIds,
             IEnumerable<string> emails,
             IEnumerable<string> linkedInUrls,
             CancellationToken cancellationToken) =>

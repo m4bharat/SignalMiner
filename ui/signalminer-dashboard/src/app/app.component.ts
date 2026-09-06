@@ -59,6 +59,20 @@ interface SharedEmailTemplateParts {
 }
 
 interface Lead {
+  firstName?: string;
+  lastName?: string;
+  rank?: number;
+  priorityGroup?: string;
+  outreachFitScore?: number;
+  zextriSegment?: string;
+  countryUnverified?: string;
+  personalizationAngle?: string;
+  outreachScoreRationale?: string;
+  dataQualityFlags?: string;
+  recommendedAction?: string;
+  originalFitScore?: number;
+  sourceRow?: number;
+  sourceSheet?: string;
   id: string;
   displayName: string;
   roleTitle?: string;
@@ -106,12 +120,19 @@ interface LeadImportResult {
 }
 
 interface LeadImportIssue {
+  sourceSheet?: string;
   rowNumber: number;
   field: string;
   message: string;
 }
 
 interface LeadImportPreviewRow {
+  rank?: number;
+  priorityGroup?: string;
+  outreachFitScore?: number;
+  dataQualityFlags?: string;
+  recommendedAction?: string;
+  sourceSheet?: string;
   rowNumber: number;
   displayName: string;
   company?: string;
@@ -211,9 +232,9 @@ export class AppComponent {
 
   protected readonly totalPages = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize())));
   protected readonly selectableEmailLeads = computed(() =>
-    this.leads().filter(lead => Boolean(lead.publicEmail)));
+    this.leads().filter(lead => this.canEmailLead(lead)));
   protected readonly selectedEmailLeads = computed(() =>
-    this.leads().filter(lead => this.selectedLeadIds().has(lead.id)));
+    this.selectableEmailLeads().filter(lead => this.selectedLeadIds().has(lead.id)));
   protected readonly selectedEmailLeadCount = computed(() => this.selectedEmailLeads().length);
   protected readonly allPageEmailLeadsSelected = computed(() => {
     const selectableLeads = this.selectableEmailLeads();
@@ -488,6 +509,7 @@ export class AppComponent {
 
   protected toggleLeadSelection(lead: Lead, event: Event): void {
     event.stopPropagation();
+    if (!this.canEmailLead(lead)) return;
     this.selectedLeadIds.update(ids => {
       const next = new Set(ids);
       if (next.has(lead.id)) {
@@ -1026,10 +1048,15 @@ export class AppComponent {
     return `${lead.displayName}${lead.company?.name ? ` at ${lead.company.name}` : ''}`;
   }
 
+  protected canEmailLead(lead: Lead): boolean {
+    return Boolean(lead.publicEmail) && lead.contactStatus !== 'DoNotContact';
+  }
+
   protected canSendSelectedLead(): boolean {
     const lead = this.selectedLead();
     return Boolean(
       lead &&
+      this.canEmailLead(lead) &&
       !this.emailSending() &&
       this.activeEmailLeadId() === lead.id &&
       this.isValidEmail(this.emailTo()) &&
@@ -1188,6 +1215,7 @@ export class AppComponent {
 
     if (!firstName) warnings.push(EmailStrings.ui.warnings.missingGreeting);
     if (!lead.publicEmail) warnings.push(EmailStrings.ui.warnings.missingRecipient);
+    if (lead.contactStatus === 'DoNotContact') warnings.push(EmailStrings.ui.warnings.doNotContact);
     for (const variable of missingRequiredVariables) {
       warnings.push(`${EmailStrings.ui.warnings.missingRequiredVariablePrefix} {{${variable}}}.`);
     }
@@ -1523,12 +1551,6 @@ export class AppComponent {
     return `${withoutFooter}${footer}`;
   }
 
-  private editableEmailBodyHtml(): string {
-    return this.includeSignature()
-      ? this.withDefaultSignature(this.emailBodyHtml())
-      : this.removeSignature(this.emailBodyHtml());
-  }
-
   private signatureHtml(): string {
     return this.emailSignatureHtml().trim();
   }
@@ -1748,23 +1770,21 @@ export class AppComponent {
 
   private buildManualContactFile(contact: ManualContactForm): File {
     const headers = [
-      'First Name',
-      'Last Name',
+      'Display Name',
       'Professional Email',
-      'Title',
+      'Role / Title',
       'Company',
       'Company Domain',
-      'LinkedIn Profile',
-      'Verification Note',
+      'LinkedIn',
+      'Notes',
       'Outreach Status',
-      'Zextri Fit Score'
+      'Original Fit Score'
     ];
     const note = ['Manually added from dashboard.', contact.note.trim()]
       .filter(Boolean)
       .join(' ');
     const row = [
       contact.name.trim(),
-      '',
       contact.email.trim(),
       contact.title.trim(),
       contact.company.trim(),

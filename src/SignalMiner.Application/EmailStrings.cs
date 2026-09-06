@@ -11,6 +11,7 @@ public static class EmailStrings
     public const string UnknownTemplateVersion = "unknown";
 
     public const string RecipientRequired = "Enter a valid recipient email address.";
+    public const string DoNotContact = "This lead is marked DoNotContact. Email sending is disabled.";
     public const string LeadEmailRequired = "This lead does not have a saved email address. Add the email to the lead before sending.";
     public const string RecipientMismatch = "Recipient email does not match the selected lead. Refresh the lead and try again.";
     public const string SubjectRequired = "Email subject is required.";

@@ -2,6 +2,7 @@ using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Net.Http.Headers;
@@ -11,10 +12,35 @@ namespace SignalMiner.Infrastructure;
 
 public static class ServiceCollectionExtensions
 {
+    public static void AddSignalMinerLocalSettings(this ConfigurationManager configuration)
+    {
+        // Keep machine-specific settings out of Git, while retaining environment
+        // variable and command-line overrides from the default host configuration.
+        var index = configuration.Sources.ToList().FindLastIndex(source => source is JsonConfigurationSource) + 1;
+        configuration.Sources.Insert(index, new JsonConfigurationSource
+        {
+            Path = "appsettings.Local.json",
+            Optional = true,
+            ReloadOnChange = false
+        });
+    }
+
+    public static string GetSignalMinerConnectionString(this IConfiguration configuration) =>
+        configuration.GetConnectionString("SignalMiner")
+        ?? "Host=localhost;Port=5432;Database=signalminer;Username=postgres;Password=postgres";
+
+    public static async Task InitializeSignalMinerDatabaseAsync(this IConfiguration configuration, CancellationToken cancellationToken = default)
+    {
+        var options = new DbContextOptionsBuilder<SignalMinerDbContext>()
+            .UseNpgsql(configuration.GetSignalMinerConnectionString()).Options;
+        await using var db = new SignalMinerDbContext(options);
+        // Create the application tables before Hangfire creates its own schema.
+        await db.Database.EnsureCreatedAsync(cancellationToken);
+    }
+
     public static IServiceCollection AddSignalMinerCore(this IServiceCollection services, IConfiguration configuration)
     {
-        var connectionString = configuration.GetConnectionString("SignalMiner")
-            ?? "Host=localhost;Port=5432;Database=signalminer;Username=postgres;Password=postgres";
+        var connectionString = configuration.GetSignalMinerConnectionString();
 
         services.AddDbContext<SignalMinerDbContext>(options => options.UseNpgsql(connectionString));
         services.AddScoped<ILeadRepository, LeadRepository>();
@@ -61,8 +87,7 @@ public static class ServiceCollectionExtensions
 
     public static IServiceCollection AddSignalMinerHangfire(this IServiceCollection services, IConfiguration configuration)
     {
-        var connectionString = configuration.GetConnectionString("SignalMiner")
-            ?? "Host=localhost;Port=5432;Database=signalminer;Username=postgres;Password=postgres";
+        var connectionString = configuration.GetSignalMinerConnectionString();
 
         services.AddHangfire(config => config.UsePostgreSqlStorage(options => options.UseNpgsqlConnection(connectionString)));
         services.AddHangfireServer();

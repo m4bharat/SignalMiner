@@ -1,10 +1,10 @@
 using Hangfire;
-using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using System.Text.Json.Serialization;
 using SignalMiner.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddSignalMinerLocalSettings();
 
 builder.Services.AddCors(options =>
 {
@@ -21,15 +21,9 @@ builder.Services
     });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.ConfigureHttpJsonOptions(options =>
-{
-    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
-});
 builder.Services.AddSignalMinerCore(builder.Configuration);
 
-var connectionString = builder.Configuration.GetConnectionString("SignalMiner")
-    ?? "Host=localhost;Port=5432;Database=signalminer;Username=postgres;Password=postgres";
-var databaseAvailable = await CanConnectToPostgresAsync(connectionString);
+var databaseAvailable = await TryInitializeDatabaseAsync(builder.Configuration);
 if (databaseAvailable)
 {
     builder.Services.AddSignalMinerHangfire(builder.Configuration);
@@ -46,9 +40,6 @@ if (app.Environment.IsDevelopment())
 
 if (databaseAvailable)
 {
-    await using var scope = app.Services.CreateAsyncScope();
-    var db = scope.ServiceProvider.GetRequiredService<SignalMinerDbContext>();
-    await db.Database.EnsureCreatedAsync();
     app.MapHangfireDashboard("/jobs");
 }
 else
@@ -60,15 +51,14 @@ app.MapControllers();
 
 app.Run();
 
-static async Task<bool> CanConnectToPostgresAsync(string connectionString)
+static async Task<bool> TryInitializeDatabaseAsync(IConfiguration configuration)
 {
     try
     {
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
+        await configuration.InitializeSignalMinerDatabaseAsync();
         return true;
     }
-    catch
+    catch (NpgsqlException)
     {
         return false;
     }

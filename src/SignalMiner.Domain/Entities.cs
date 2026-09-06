@@ -42,6 +42,21 @@ public sealed class Lead
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public string DisplayName { get; set; } = string.Empty;
+    public string? FirstName { get; set; }
+    public string? LastName { get; set; }
+    public int? Rank { get; set; }
+    public string? PriorityGroup { get; set; }
+    public decimal? OutreachFitScore { get; set; }
+    public string? ZextriSegment { get; set; }
+    public bool IsImported { get; set; }
+    public string? CountryUnverified { get; set; }
+    public string? PersonalizationAngle { get; set; }
+    public string? OutreachScoreRationale { get; set; }
+    public string? DataQualityFlags { get; set; }
+    public string? RecommendedAction { get; set; }
+    public int? OriginalFitScore { get; set; }
+    public int? SourceRow { get; set; }
+    public string? SourceSheet { get; set; }
     public string? RoleTitle { get; set; }
     public string? PublicEmail { get; set; }
     public string? WebsiteUrl { get; set; }

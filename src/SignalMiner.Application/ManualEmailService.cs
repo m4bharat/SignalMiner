@@ -18,6 +18,10 @@ public sealed class ManualEmailService(
         {
             return null;
         }
+        if (!request.IsTest && lead.ContactStatus == ContactStatus.DoNotContact)
+        {
+            throw new ManualEmailException(EmailStrings.DoNotContact);
+        }
 
         var leadEmail = ParseOptionalEmail(lead.PublicEmail, "Lead email");
         var requestedEmail = ParseOptionalEmail(request.ToEmail, "To");

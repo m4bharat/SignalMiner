@@ -178,6 +178,7 @@ export const EmailStrings = {
       noLead: 'No lead is selected.',
       missingGreeting: 'Greeting may be missing because the lead name is blank.',
       missingRecipient: 'Recipient email is missing for this lead.',
+      doNotContact: 'This lead is marked DoNotContact. Email sending is disabled.',
       recipientMismatch: 'Recipient email does not match the selected lead.',
       missingRequiredVariablePrefix: 'Required template variable is missing:',
       unresolvedVariablesPrefix: 'Unresolved variables remain:'

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO.Compression;
+using System.Net.Mail;
 using System.Text;
 using System.Xml.Linq;
 using SignalMiner.Application;
@@ -13,8 +14,8 @@ public sealed class LeadImportService(ILeadRepository repository) : ILeadImportS
 
     private static readonly string[][] RequiredHeaderGroups =
     [
-        ["First Name"],
-        ["Last Name"]
+        ["First Name", "Display Name"],
+        ["Last Name", "Display Name"]
     ];
 
     public async Task<LeadImportResult> ImportAsync(Stream file, string fileName, bool commit, CancellationToken cancellationToken)
@@ -39,6 +40,7 @@ public sealed class LeadImportService(ILeadRepository repository) : ILeadImportS
 
         foreach (var row in rows.Items)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var candidate = MapCandidate(row, issues);
             if (candidate is not null)
             {
@@ -47,8 +49,9 @@ public sealed class LeadImportService(ILeadRepository repository) : ILeadImportS
         }
 
         var existingKeys = await repository.FindExistingImportKeysAsync(
-            candidates.Select(x => x.NormalizedEmail).OfType<string>(),
-            candidates.Select(x => x.NormalizedLinkedInUrl).OfType<string>(),
+            candidates.Select(x => x.Lead.Id),
+            candidates.Select(x => x.Lead.PublicEmail).OfType<string>(),
+            candidates.Select(x => x.Lead.LinkedInUrl).OfType<string>(),
             cancellationToken);
         var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var leadsToImport = new List<Lead>();
@@ -59,14 +62,15 @@ public sealed class LeadImportService(ILeadRepository repository) : ILeadImportS
             var keys = candidate.ImportKeys;
             var duplicateReason = keys.FirstOrDefault(existingKeys.Contains) is { } existingKey
                 ? BuildDuplicateReason(existingKey)
-                : keys.FirstOrDefault(key => !seenKeys.Add(key)) is { } batchKey
-                    ? $"Duplicate in this file by {BuildDuplicateReason(batchKey).ToLowerInvariant()}"
+                : keys.FirstOrDefault(seenKeys.Contains) is { } batchKey
+                    ? BuildDuplicateReason(batchKey, existing: false)
                     : null;
             var isDuplicate = duplicateReason is not null;
 
             if (!isDuplicate)
             {
-                leadsToImport.Add(candidate.ToLead());
+                leadsToImport.Add(candidate.Lead);
+                foreach (var key in keys) seenKeys.Add(key);
             }
 
             if (previewRows.Count < PreviewLimit)
@@ -85,7 +89,7 @@ public sealed class LeadImportService(ILeadRepository repository) : ILeadImportS
             rows.Items.Count,
             candidates.Count,
             commit ? leadsToImport.Count : 0,
-            rows.Items.Count - candidates.Count + candidates.Count - leadsToImport.Count,
+            rows.Items.Count - leadsToImport.Count,
             issues,
             previewRows);
     }
@@ -112,20 +116,43 @@ public sealed class LeadImportService(ILeadRepository repository) : ILeadImportS
 
     private static ParsedRows ParseXlsx(Stream file)
     {
+        // ASP.NET's bounded upload stream cannot seek backwards past the start.
+        if (file.CanSeek && file.Length - file.Position < 22)
+            throw new InvalidDataException("The XLSX archive is truncated.");
         using var archive = new ZipArchive(file, ZipArchiveMode.Read, leaveOpen: true);
         var sharedStrings = ReadSharedStrings(archive);
-        var sheetEntry = archive.GetEntry("xl/worksheets/sheet1.xml")
-            ?? throw new InvalidOperationException("The workbook must contain a first worksheet.");
-
-        using var sheetStream = sheetEntry.Open();
-        var document = XDocument.Load(sheetStream);
         XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
-        var records = document.Descendants(ns + "row")
-            .Select(row => ReadXlsxRow(row, sharedStrings, ns))
-            .Where(values => values.Any(value => !string.IsNullOrWhiteSpace(value)))
-            .ToList();
+        XNamespace relationshipNs = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+        using var workbookStream = (archive.GetEntry("xl/workbook.xml")
+            ?? throw new InvalidOperationException("Workbook metadata is missing.")).Open();
+        using var relationshipsStream = (archive.GetEntry("xl/_rels/workbook.xml.rels")
+            ?? throw new InvalidOperationException("Workbook relationships are missing.")).Open();
+        var workbook = XDocument.Load(workbookStream);
+        var relationships = XDocument.Load(relationshipsStream).Root!.Elements()
+            .Where(element => element.Attribute("TargetMode")?.Value != "External")
+            .ToDictionary(element => element.Attribute("Id")!.Value, element => element.Attribute("Target")!.Value);
+        var sheets = new List<ParsedRows>();
+        foreach (var sheet in workbook.Descendants(ns + "sheet"))
+        {
+            if (!relationships.TryGetValue(sheet.Attribute(relationshipNs + "id")!.Value, out var target)) continue;
+            var path = new Uri(new Uri("https://workbook.local/xl/"), target).AbsolutePath.TrimStart('/');
+            using var sheetStream = (archive.GetEntry(path)
+                ?? throw new InvalidOperationException($"Worksheet {sheet.Attribute("name")?.Value} is missing.")).Open();
+            var document = XDocument.Load(sheetStream);
+            var xmlRows = document.Descendants(ns + "row").ToList();
+            var records = xmlRows.Select(row => ReadXlsxRow(row, sharedStrings, ns)).ToList();
+            var rowNumbers = xmlRows.Select((row, index) => (int?)row.Attribute("r") ?? index + 1).ToArray();
+            var parsed = RecordsToRows(records, sheet.Attribute("name")?.Value, rowNumbers);
+            if (RequiredHeaderGroups.All(group => group.Any(header => parsed.Headers.Contains(header, StringComparer.OrdinalIgnoreCase))))
+                sheets.Add(parsed);
+        }
 
-        return RecordsToRows(records);
+        // Prioritized sheets are the cleaned data; Source Data repeats the raw leads.
+        var selected = sheets.Where(sheet => sheet.Headers.Contains("Outreach Fit /10", StringComparer.OrdinalIgnoreCase)).ToList();
+        if (selected.Count == 0)
+            throw new InvalidOperationException("No prioritized lead worksheet was found. Expected name columns and Outreach Fit /10.");
+        return new ParsedRows(selected.SelectMany(sheet => sheet.Headers).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+            selected.SelectMany(sheet => sheet.Items).ToList());
     }
 
     private static string[] ReadXlsxRow(XElement row, string[] sharedStrings, XNamespace ns)
@@ -203,7 +230,7 @@ public sealed class LeadImportService(ILeadRepository repository) : ILeadImportS
         return column == 0 ? null : column;
     }
 
-    private static ParsedRows RecordsToRows(IReadOnlyList<string[]> records)
+    private static ParsedRows RecordsToRows(IReadOnlyList<string[]> records, string? sheetName = null, IReadOnlyList<int>? rowNumbers = null)
     {
         if (records.Count == 0)
         {
@@ -211,8 +238,12 @@ public sealed class LeadImportService(ILeadRepository repository) : ILeadImportS
         }
 
         var headers = records[0].Select(header => header.Trim()).ToArray();
+        var duplicateHeader = headers.Where(header => header.Length > 0)
+            .GroupBy(header => header, StringComparer.OrdinalIgnoreCase).FirstOrDefault(group => group.Count() > 1)?.Key;
+        if (duplicateHeader is not null)
+            throw new InvalidOperationException($"Duplicate column '{duplicateHeader}' in {sheetName ?? "CSV file"}.");
         var rows = records.Skip(1)
-            .Select((values, index) => new ImportRow(index + 2, headers, values))
+            .Select((values, index) => new ImportRow(rowNumbers?[index + 1] ?? index + 2, headers, values, sheetName))
             .Where(row => row.HasValues)
             .ToList();
         return new ParsedRows(headers, rows);
@@ -271,6 +302,9 @@ public sealed class LeadImportService(ILeadRepository repository) : ILeadImportS
             }
         }
 
+        if (inQuotes)
+            throw new InvalidOperationException("CSV contains an unclosed quoted field.");
+
         if (value.Length > 0 || fields.Count > 0)
         {
             fields.Add(value.ToString());
@@ -282,98 +316,102 @@ public sealed class LeadImportService(ILeadRepository repository) : ILeadImportS
 
     private static ImportCandidate? MapCandidate(ImportRow row, List<LeadImportIssue> issues)
     {
-        var firstName = row.Get("First Name");
-        var lastName = row.Get("Last Name");
-        var displayName = string.Join(' ', new[] { firstName, lastName }.Where(value => !string.IsNullOrWhiteSpace(value))).Trim();
-        var email = row.GetAny("Professional Email", "Email");
-        var linkedInValue = row.GetAny("LinkedIn Profile", "LinkedIn");
-        var linkedInUrl = NormalizeLinkedInUrl(linkedInValue);
-        var score = ParseScore(row.Get("Zextri Fit Score"));
-        var companyDomain = NormalizeDomain(row.Get("Company Domain"));
+        var issueCount = issues.Count;
+        var leadIdText = row.Get("Lead Id");
+        var leadId = Guid.TryParse(leadIdText, out var id) ? id : Guid.NewGuid();
+        if (leadIdText is not null && (!Guid.TryParse(leadIdText, out _) || leadId == Guid.Empty))
+            issues.Add(new LeadImportIssue(row.RowNumber, "Lead Id", "Lead ID must be a non-empty UUID."));
 
+        var displayName = row.Get("Display Name") ?? string.Join(' ', new[] { row.Get("First Name"), row.Get("Last Name") }.OfType<string>());
         if (string.IsNullOrWhiteSpace(displayName))
-        {
-            issues.Add(new LeadImportIssue(row.RowNumber, "First Name / Last Name", "A contact name is required."));
-        }
+            issues.Add(new LeadImportIssue(row.RowNumber, "Display Name", "A contact name is required."));
 
-        if (!string.IsNullOrWhiteSpace(email) && !email.Contains('@', StringComparison.Ordinal))
-        {
-            issues.Add(new LeadImportIssue(row.RowNumber, "Professional Email / Email", "A valid professional email is required."));
-        }
+        var email = row.Get("Professional Email")?.ToLowerInvariant();
+        var linkedInValue = row.Get("LinkedIn");
+        var linkedInUrl = PublicProfileUrlDiscoveryService.NormalizeLinkedInUrl(linkedInValue);
+        if (email is not null && (!MailAddress.TryCreate(email, out var address) || address.Address != email || email.Contains('\r') || email.Contains('\n')))
+            issues.Add(new LeadImportIssue(row.RowNumber, "Professional Email", "A valid professional email is required."));
+        if (linkedInValue is not null && linkedInUrl is null)
+            issues.Add(new LeadImportIssue(row.RowNumber, "LinkedIn", "A valid LinkedIn URL is required."));
+        if (email is null && linkedInUrl is null && leadIdText is null)
+            issues.Add(new LeadImportIssue(row.RowNumber, "Professional Email / LinkedIn / Lead Id", "An email, LinkedIn URL or lead ID is required."));
 
-        if (!string.IsNullOrWhiteSpace(linkedInValue) && linkedInUrl is null)
+        var rank = ReadInteger("Rank");
+        var sourceRow = ReadInteger("Source Row");
+        var originalScore = ReadInteger("Original Fit Score", 100);
+        var contactStatus = ContactStatus.NotContacted;
+        if (row.Get("Outreach Status") is { } statusValue &&
+            (!Enum.TryParse(statusValue.Replace(" ", string.Empty), ignoreCase: true, out contactStatus) || !Enum.IsDefined(contactStatus)))
+            issues.Add(new LeadImportIssue(row.RowNumber, "Outreach Status", "Expected a valid contact status."));
+        decimal? outreachScore = null;
+        if (row.Get("Outreach Fit /10") is { } value)
         {
-            issues.Add(new LeadImportIssue(row.RowNumber, "LinkedIn Profile / LinkedIn", "LinkedIn URL must start with linkedin.com or a LinkedIn URL."));
+            if (decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var score) && score >= 0 && score <= 10 && decimal.Round(score, 2) == score)
+                outreachScore = score;
+            else
+                issues.Add(new LeadImportIssue(row.RowNumber, "Outreach Fit /10", "Expected a score from 0 to 10 with at most two decimal places."));
         }
-
-        if (string.IsNullOrWhiteSpace(email) && linkedInUrl is null)
+        if (issues.Count > issueCount)
         {
-            issues.Add(new LeadImportIssue(row.RowNumber, "Professional Email / Email or LinkedIn", "An email or LinkedIn URL is required."));
-        }
-
-        if (string.IsNullOrWhiteSpace(displayName) ||
-            (!string.IsNullOrWhiteSpace(email) && !email.Contains('@', StringComparison.Ordinal)) ||
-            (string.IsNullOrWhiteSpace(email) && linkedInUrl is null))
-        {
+            for (var index = issueCount; index < issues.Count; index++)
+                issues[index] = issues[index] with { SourceSheet = row.SheetName };
             return null;
         }
 
-        return new ImportCandidate(
-            row.RowNumber,
-            displayName,
-            row.GetAny("Title", "Job Title"),
-            row.GetAny("Company", "Company Name"),
-            companyDomain,
-            row.Get("Country"),
-            string.IsNullOrWhiteSpace(email) ? null : email.Trim().ToLowerInvariant(),
-            linkedInUrl,
-            row.Get("Segment"),
-            Math.Clamp(score, 0, 100),
-            row.GetAny("Verification Note", "Fit Reason"),
-            ParseContactStatus(row.Get("Outreach Status")),
-            row.Get("Priority"));
-    }
-
-    private static int ParseScore(string? value)
-    {
-        if (!decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var score))
+        var companyName = row.Get("Company");
+        var companyDomain = NormalizeDomain(row.Get("Company Domain"));
+        var lead = new Lead
         {
-            return 0;
-        }
+            Id = leadId,
+            DisplayName = displayName,
+            FirstName = row.Get("First Name"),
+            LastName = row.Get("Last Name"),
+            RoleTitle = row.Get("Role / Title"),
+            PublicEmail = email,
+            LinkedInUrl = linkedInUrl,
+            WebsiteUrl = row.Get("Website") ?? (companyDomain is null ? null : $"https://{companyDomain}"),
+            XUrl = row.Get("X URL"),
+            GitHubUrl = row.Get("GitHub URL"),
+            Rank = rank,
+            PriorityGroup = row.Get("Priority Group"),
+            OutreachFitScore = outreachScore,
+            OriginalFitScore = originalScore,
+            FitScore = originalScore ?? 0,
+            ZextriSegment = row.Get("Zextri Segment"),
+            CountryUnverified = row.Get("Country (Unverified)"),
+            PersonalizationAngle = row.Get("Personalization Angle"),
+            OutreachScoreRationale = row.Get("Score Rationale"),
+            DataQualityFlags = row.Get("Data Quality Flags"),
+            RecommendedAction = row.Get("Recommended Action"),
+            Notes = row.Get("Notes"),
+            SourceRow = sourceRow,
+            SourceSheet = row.SheetName,
+            IsImported = true,
+            Status = LeadStatus.NeedsManualReview,
+            ContactStatus = contactStatus,
+            Company = companyName is null && companyDomain is null ? null : new Company
+            {
+                Name = companyName ?? string.Empty,
+                Domain = companyDomain
+            }
+        };
+        if (linkedInUrl is not null)
+            lead.SourceProfiles.Add(new SourceProfile
+            {
+                Kind = SourceKind.LinkedInProfileUrlOnly,
+                Url = linkedInUrl,
+                PublicHandle = displayName
+            });
+        return new ImportCandidate(row.RowNumber, lead);
 
-        if (score is > 0 and <= 10)
+        int? ReadInteger(string field, int maximum = int.MaxValue)
         {
-            score *= 10;
-        }
-
-        return (int)Math.Round(score, MidpointRounding.AwayFromZero);
-    }
-
-    private static ContactStatus ParseContactStatus(string? value)
-    {
-        var normalized = (value ?? string.Empty).Replace(" ", string.Empty, StringComparison.OrdinalIgnoreCase);
-        return Enum.TryParse<ContactStatus>(normalized, ignoreCase: true, out var status)
-            ? status
-            : ContactStatus.NotContacted;
-    }
-
-    private static string? NormalizeLinkedInUrl(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
+            if (row.Get(field) is not { } text) return null;
+            if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number) && number >= 0 && number <= maximum)
+                return number;
+            issues.Add(new LeadImportIssue(row.RowNumber, field, $"Expected an integer from 0 to {maximum}."));
             return null;
         }
-
-        var trimmed = value.Trim();
-        if (!trimmed.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-        {
-            trimmed = $"https://{trimmed}";
-        }
-
-        return Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) &&
-            uri.Host.Contains("linkedin.com", StringComparison.OrdinalIgnoreCase)
-            ? uri.ToString()
-            : null;
     }
 
     private static string? NormalizeDomain(string? value)
@@ -388,108 +426,50 @@ public sealed class LeadImportService(ILeadRepository repository) : ILeadImportS
         return Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) ? uri.Host : null;
     }
 
-    private static string BuildDuplicateReason(string key) =>
-        key.StartsWith("email:", StringComparison.OrdinalIgnoreCase)
-            ? "Existing lead with same email"
-            : "Existing lead with same LinkedIn URL";
+    private static string BuildDuplicateReason(string key, bool existing = true)
+    {
+        var field = key.StartsWith("id:", StringComparison.OrdinalIgnoreCase) ? "ID"
+            : key.StartsWith("email:", StringComparison.OrdinalIgnoreCase) ? "email" : "LinkedIn URL";
+        return existing ? $"Existing lead with same {field}" : $"Duplicate in this file with same {field}";
+    }
 
     private sealed record ParsedRows(string[] Headers, IReadOnlyList<ImportRow> Items);
 
-    private sealed class ImportRow(int rowNumber, string[] headers, string[] values)
+    private sealed class ImportRow(int rowNumber, string[] headers, string[] values, string? sheetName = null)
     {
         public int RowNumber { get; } = rowNumber;
+        public string? SheetName { get; } = sheetName;
 
         public bool HasValues => values.Any(value => !string.IsNullOrWhiteSpace(value));
 
         public string? Get(string header)
         {
             var index = Array.FindIndex(headers, item => item.Equals(header, StringComparison.OrdinalIgnoreCase));
-            return index >= 0 && index < values.Length ? values[index].Trim() : null;
+            var value = index >= 0 && index < values.Length ? values[index].Trim() : null;
+            return string.IsNullOrWhiteSpace(value) || value.Equals("NULL", StringComparison.OrdinalIgnoreCase) ? null : value;
         }
 
-        public string? GetAny(params string[] candidates) =>
-            candidates.Select(Get).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
     }
 
-    private sealed record ImportCandidate(
-        int RowNumber,
-        string DisplayName,
-        string? RoleTitle,
-        string? CompanyName,
-        string? CompanyDomain,
-        string? Country,
-        string? NormalizedEmail,
-        string? LinkedInUrl,
-        string? Segment,
-        int FitScore,
-        string? VerificationNote,
-        ContactStatus ContactStatus,
-        string? Priority)
+    private sealed record ImportCandidate(int RowNumber, Lead Lead)
     {
-        public string? NormalizedLinkedInUrl => LinkedInUrl?.Trim().ToLowerInvariant();
-
-        public string[] ImportKeys =>
-            new[] { NormalizedEmail is null ? null : $"email:{NormalizedEmail}", NormalizedLinkedInUrl is null ? null : $"linkedin:{NormalizedLinkedInUrl}" }
-                .OfType<string>()
-                .ToArray();
-
-        public Lead ToLead()
+        public string[] ImportKeys => new[]
         {
-            var notes = new[]
-            {
-                string.IsNullOrWhiteSpace(Priority) ? null : $"Import priority: {Priority}",
-                string.IsNullOrWhiteSpace(CompanyDomain) ? null : $"Company domain: {CompanyDomain}",
-                string.IsNullOrWhiteSpace(Country) ? null : $"Country: {Country}",
-                string.IsNullOrWhiteSpace(Segment) ? null : $"Segment: {Segment}",
-                VerificationNote,
-                "Imported from curated launch contacts file. LinkedIn URL is stored only; SignalMiner does not scrape LinkedIn."
-            }.Where(value => !string.IsNullOrWhiteSpace(value));
-
-            var sourceProfiles = new List<SourceProfile>();
-            if (!string.IsNullOrWhiteSpace(LinkedInUrl))
-            {
-                sourceProfiles.Add(new SourceProfile
-                {
-                    Kind = SourceKind.LinkedInProfileUrlOnly,
-                    Url = LinkedInUrl,
-                    PublicHandle = DisplayName,
-                    Bio = "Imported public LinkedIn URL; not scraped."
-                });
-            }
-
-            return new Lead
-            {
-                DisplayName = DisplayName,
-                RoleTitle = RoleTitle,
-                PublicEmail = NormalizedEmail,
-                WebsiteUrl = string.IsNullOrWhiteSpace(CompanyDomain) ? null : $"https://{CompanyDomain}",
-                LinkedInUrl = LinkedInUrl,
-                FitScore = FitScore,
-                ScoreRationale = string.IsNullOrWhiteSpace(VerificationNote)
-                    ? "Imported Zextri fit score from curated launch contacts file."
-                    : VerificationNote,
-                Status = LeadStatus.NeedsManualReview,
-                ContactStatus = ContactStatus,
-                Notes = string.Join(Environment.NewLine, notes),
-                Company = string.IsNullOrWhiteSpace(CompanyName)
-                    ? null
-                    : new Company
-                    {
-                        Name = CompanyName,
-                        Domain = CompanyDomain,
-                        Summary = Segment,
-                        Keywords = SplitSegment(Segment)
-                    },
-                SourceProfiles = sourceProfiles
-            };
-        }
+            $"id:{Lead.Id}",
+            Lead.PublicEmail is null ? null : $"email:{Lead.PublicEmail}",
+            Lead.LinkedInUrl is null ? null : $"linkedin:{Lead.LinkedInUrl}"
+        }.OfType<string>().ToArray();
 
         public LeadImportPreviewRow ToPreviewRow(bool isDuplicate, string? duplicateReason) =>
-            new(RowNumber, DisplayName, RoleTitle, CompanyName, NormalizedEmail, LinkedInUrl, Segment, FitScore, ContactStatus, isDuplicate, duplicateReason);
-
-        private static string[] SplitSegment(string? segment) =>
-            string.IsNullOrWhiteSpace(segment)
-                ? []
-                : segment.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            new(RowNumber, Lead.DisplayName, Lead.RoleTitle, Lead.Company?.Name, Lead.PublicEmail,
+                Lead.LinkedInUrl, Lead.ZextriSegment, Lead.FitScore, Lead.ContactStatus, isDuplicate, duplicateReason)
+            {
+                Rank = Lead.Rank,
+                PriorityGroup = Lead.PriorityGroup,
+                OutreachFitScore = Lead.OutreachFitScore,
+                DataQualityFlags = Lead.DataQualityFlags,
+                RecommendedAction = Lead.RecommendedAction,
+                SourceSheet = Lead.SourceSheet
+            };
     }
 }
