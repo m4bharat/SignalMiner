@@ -166,7 +166,7 @@ interface ToastMessage {
 })
 export class AppComponent {
   private readonly http = inject(HttpClient);
-  private readonly apiBase = 'http://localhost:5126/api';
+  private readonly apiBase = 'http://localhost:5000/api';
   private readonly authStorageKey = 'signalminer.dashboard.authenticated';
   private readonly dashboardUsername = 'admin@zextri.com';
   private readonly dashboardPassword = 'zextri';
@@ -184,7 +184,17 @@ export class AppComponent {
   protected readonly selectedLead = signal<Lead | null>(null);
   protected readonly total = signal(0);
   protected readonly query = signal('');
-  protected readonly minFitScore = signal<number | null>(50);
+  protected readonly minFitScore = signal<number | null>(null);
+  protected readonly priorityGroup = signal('');
+  protected readonly segment = signal('');
+  protected readonly country = signal('');
+  protected readonly companyFilter = signal('');
+  protected readonly minOutreachScore = signal<number | null>(null);
+  protected readonly maxOutreachScore = signal<number | null>(null);
+  protected readonly hasEmail = signal('');
+  protected readonly hasLinkedIn = signal('');
+  protected readonly hasWebsite = signal('');
+  protected readonly sortBy = signal('rank');
   protected readonly contactStatus = signal<ContactStatus | ''>('');
   protected readonly sourceFilter = signal<SourceFilter>('');
   protected readonly page = signal(1);
@@ -292,6 +302,13 @@ export class AppComponent {
   }
 
   protected search(resetPage = true): void {
+    const min = this.minOutreachScore();
+    const max = this.maxOutreachScore();
+    if ([min, max].some(value => value !== null && (!Number.isFinite(value) || value < 0 || value > 10)) ||
+        (min !== null && max !== null && min > max)) {
+      this.message.set('Outreach scores must be between 0 and 10, with minimum no greater than maximum.');
+      return;
+    }
     if (resetPage) {
       this.page.set(1);
     }
@@ -302,6 +319,16 @@ export class AppComponent {
       .set('pageSize', this.pageSize());
 
     if (this.query()) params = params.set('query', this.query());
+    for (const [key, value] of Object.entries({
+      priorityGroup: this.priorityGroup().trim(), segment: this.segment().trim(),
+      country: this.country().trim(), company: this.companyFilter().trim(),
+      hasEmail: this.hasEmail(), hasLinkedIn: this.hasLinkedIn(), hasWebsite: this.hasWebsite(),
+      sortBy: this.sortBy()
+    })) {
+      if (value) params = params.set(key, value);
+    }
+    if (min !== null) params = params.set('minOutreachScore', min);
+    if (max !== null) params = params.set('maxOutreachScore', max);
     if (this.minFitScore() !== null) params = params.set('minFitScore', this.minFitScore()!.toString());
     if (this.contactStatus()) params = params.set('contactStatus', this.contactStatus());
     if (this.sourceFilter() === 'Imported') {
@@ -329,8 +356,8 @@ export class AppComponent {
         }
         this.loading.set(false);
       },
-      error: () => {
-        this.message.set('API unavailable. Start SignalMiner.Api on http://localhost:5000.');
+      error: (error: HttpErrorResponse) => {
+        this.message.set(error.error?.message || 'Could not load leads. Check that the API is running on http://localhost:5000.');
         this.loading.set(false);
       }
     });
@@ -366,6 +393,7 @@ export class AppComponent {
   }
 
   private showDiscoveredLeads(): void {
+    this.resetAdvancedFilters();
     this.query.set('');
     this.minFitScore.set(null);
     this.contactStatus.set('');
@@ -431,11 +459,25 @@ export class AppComponent {
   }
 
   protected clearFilters(): void {
+    this.resetAdvancedFilters();
     this.query.set('');
     this.minFitScore.set(null);
     this.contactStatus.set('');
     this.sourceFilter.set('');
     this.search();
+  }
+
+  private resetAdvancedFilters(): void {
+    this.priorityGroup.set('');
+    this.segment.set('');
+    this.country.set('');
+    this.companyFilter.set('');
+    this.minOutreachScore.set(null);
+    this.maxOutreachScore.set(null);
+    this.hasEmail.set('');
+    this.hasLinkedIn.set('');
+    this.hasWebsite.set('');
+    this.sortBy.set('rank');
   }
 
   protected toggleDetailExpanded(): void {

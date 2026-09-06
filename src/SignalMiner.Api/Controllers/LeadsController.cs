@@ -182,10 +182,23 @@ public sealed class LeadsController(
         [FromQuery] bool? hasEmail,
         [FromQuery] bool? hasLinkedIn,
         [FromQuery] bool? hasWebsite,
+        [FromQuery] string? priorityGroup,
+        [FromQuery] string? segment,
+        [FromQuery] string? country,
+        [FromQuery] string? company,
+        [FromQuery] decimal? minOutreachScore,
+        [FromQuery] decimal? maxOutreachScore,
+        [FromQuery] string? sortBy,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 25,
         CancellationToken cancellationToken = default)
     {
+        if (minOutreachScore is < 0 or > 10 || maxOutreachScore is < 0 or > 10 ||
+            (minOutreachScore.HasValue && maxOutreachScore.HasValue && minOutreachScore > maxOutreachScore))
+            return BadRequest(new { message = "Outreach scores must be between 0 and 10, with minimum no greater than maximum." });
+        if (sortBy is not (null or "" or "rank" or "outreach" or "fit" or "name" or "recent"))
+            return BadRequest(new { message = "Choose a valid sort order." });
+
         var result = await repository.SearchAsync(
             new LeadSearchRequest(
                 query,
@@ -198,7 +211,8 @@ public sealed class LeadsController(
                 hasLinkedIn,
                 hasWebsite,
                 page <= 0 ? 1 : page,
-                pageSize <= 0 ? 25 : pageSize),
+                pageSize <= 0 ? 25 : pageSize,
+                priorityGroup, segment, country, company, minOutreachScore, maxOutreachScore, sortBy),
             cancellationToken);
 
         return Ok(new LeadSearchDto(result.Items.Select(LeadDto.From).ToArray(), result.Total));

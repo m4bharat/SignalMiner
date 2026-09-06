@@ -54,10 +54,10 @@
     <aside class="filters">
       <label>
         Search
-        <input [ngModel]="query()" (ngModelChange)="query.set($event)" placeholder="Name, title, company, email, URL">
+        <input [ngModel]="query()" (ngModelChange)="query.set($event)" (keydown.enter)="search()" placeholder="Name, role, email, notes, recommendation…">
       </label>
       <label>
-        Minimum fit
+        Minimum original fit /100
         <input type="number" [ngModel]="minFitScore()" (ngModelChange)="minFitScore.set($event)" min="0" max="100">
       </label>
       <label>
@@ -82,6 +82,51 @@
           <option value="Replied">Replied</option>
           <option value="NotInterested">Not interested</option>
           <option value="DoNotContact">Do not contact</option>
+        </select>
+      </label>
+      <details class="advanced-filters">
+        <summary>More filters</summary>
+        <label>Priority group
+          <input [ngModel]="priorityGroup()" (ngModelChange)="priorityGroup.set($event)" placeholder="e.g. Verify Before Send">
+        </label>
+        <label>Segment
+          <input [ngModel]="segment()" (ngModelChange)="segment.set($event)" placeholder="e.g. SaaS">
+        </label>
+        <label>Country (unverified)
+          <input [ngModel]="country()" (ngModelChange)="country.set($event)" placeholder="Country contains…">
+        </label>
+        <label>Company or domain
+          <input [ngModel]="companyFilter()" (ngModelChange)="companyFilter.set($event)" placeholder="Company name or domain…">
+        </label>
+        <label>Minimum outreach fit /10
+          <input type="number" min="0" max="10" step="0.1" [ngModel]="minOutreachScore()" (ngModelChange)="minOutreachScore.set($event)">
+        </label>
+        <label>Maximum outreach fit /10
+          <input type="number" min="0" max="10" step="0.1" [ngModel]="maxOutreachScore()" (ngModelChange)="maxOutreachScore.set($event)">
+        </label>
+        <label>Email
+          <select [ngModel]="hasEmail()" (ngModelChange)="hasEmail.set($event)">
+            <option value="">Any</option><option value="true">Available</option><option value="false">Missing</option>
+          </select>
+        </label>
+        <label>LinkedIn
+          <select [ngModel]="hasLinkedIn()" (ngModelChange)="hasLinkedIn.set($event)">
+            <option value="">Any</option><option value="true">Available</option><option value="false">Missing</option>
+          </select>
+        </label>
+        <label>Website
+          <select [ngModel]="hasWebsite()" (ngModelChange)="hasWebsite.set($event)">
+            <option value="">Any</option><option value="true">Available</option><option value="false">Missing</option>
+          </select>
+        </label>
+      </details>
+      <label>Sort by
+        <select [ngModel]="sortBy()" (ngModelChange)="sortBy.set($event)">
+          <option value="rank">Priority rank</option>
+          <option value="outreach">Highest outreach fit</option>
+          <option value="fit">Highest original fit</option>
+          <option value="name">Name A–Z</option>
+          <option value="recent">Recently updated</option>
         </select>
       </label>
       <div class="filter-actions">

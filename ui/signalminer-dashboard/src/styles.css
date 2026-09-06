@@ -168,6 +168,16 @@ label {
   gap: 0.5rem;
 }
 
+.advanced-filters {
+  margin-bottom: 1rem;
+}
+
+.advanced-filters summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 0.8rem;
+}
+
 .secondary {
   background: #e8ece6;
   color: #243236;

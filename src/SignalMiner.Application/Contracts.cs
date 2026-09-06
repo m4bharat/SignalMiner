@@ -22,7 +22,14 @@ public sealed record LeadSearchRequest(
     bool? HasLinkedIn,
     bool? HasWebsite,
     int Page = 1,
-    int PageSize = 5);
+    int PageSize = 5,
+    string? PriorityGroup = null,
+    string? Segment = null,
+    string? Country = null,
+    string? Company = null,
+    decimal? MinOutreachScore = null,
+    decimal? MaxOutreachScore = null,
+    string? SortBy = null);
 
 public sealed record UpdateOutreachStatusRequest(ContactStatus Status, string? Note);
 

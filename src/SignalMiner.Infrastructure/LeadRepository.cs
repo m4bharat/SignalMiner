@@ -41,6 +41,10 @@ public sealed class LeadRepository(SignalMinerDbContext db) : ILeadRepository
                 (x.LinkedInUrl != null && x.LinkedInUrl.ToLower().Contains(q)) ||
                 (x.WebsiteUrl != null && x.WebsiteUrl.ToLower().Contains(q)) ||
                 (x.Notes != null && x.Notes.ToLower().Contains(q)) ||
+                (x.PersonalizationAngle != null && x.PersonalizationAngle.ToLower().Contains(q)) ||
+                (x.OutreachScoreRationale != null && x.OutreachScoreRationale.ToLower().Contains(q)) ||
+                (x.DataQualityFlags != null && x.DataQualityFlags.ToLower().Contains(q)) ||
+                (x.RecommendedAction != null && x.RecommendedAction.ToLower().Contains(q)) ||
                 (x.ZextriSegment != null && x.ZextriSegment.ToLower().Contains(q)) ||
                 (x.PriorityGroup != null && x.PriorityGroup.ToLower().Contains(q)) ||
                 (x.CountryUnverified != null && x.CountryUnverified.ToLower().Contains(q)) ||
@@ -96,14 +100,44 @@ public sealed class LeadRepository(SignalMinerDbContext db) : ILeadRepository
                 : query.Where(x => x.WebsiteUrl == null || x.WebsiteUrl == string.Empty);
         }
 
+        if (!string.IsNullOrWhiteSpace(request.PriorityGroup))
+        {
+            var value = request.PriorityGroup.Trim().ToLowerInvariant();
+            query = query.Where(x => x.PriorityGroup != null && x.PriorityGroup.ToLower().Contains(value));
+        }
+        if (!string.IsNullOrWhiteSpace(request.Segment))
+        {
+            var value = request.Segment.Trim().ToLowerInvariant();
+            query = query.Where(x => x.ZextriSegment != null && x.ZextriSegment.ToLower().Contains(value));
+        }
+        if (!string.IsNullOrWhiteSpace(request.Country))
+        {
+            var value = request.Country.Trim().ToLowerInvariant();
+            query = query.Where(x => x.CountryUnverified != null && x.CountryUnverified.ToLower().Contains(value));
+        }
+        if (!string.IsNullOrWhiteSpace(request.Company))
+        {
+            var value = request.Company.Trim().ToLowerInvariant();
+            query = query.Where(x => x.Company != null && (x.Company.Name.ToLower().Contains(value) ||
+                (x.Company.Domain != null && x.Company.Domain.ToLower().Contains(value))));
+        }
+        if (request.MinOutreachScore is not null)
+            query = query.Where(x => x.OutreachFitScore >= request.MinOutreachScore);
+        if (request.MaxOutreachScore is not null)
+            query = query.Where(x => x.OutreachFitScore <= request.MaxOutreachScore);
+
         var total = await query.CountAsync(cancellationToken);
         var page = Math.Max(1, request.Page);
         var pageSize = Math.Clamp(request.PageSize, 1, 100);
-        var items = await query
-            .OrderBy(x => x.Rank == null)
-            .ThenBy(x => x.Rank)
-            .ThenByDescending(x => x.FitScore)
-            .ThenByDescending(x => x.UpdatedAt)
+        var sorted = request.SortBy switch
+        {
+            "outreach" => query.OrderBy(x => x.OutreachFitScore == null).ThenByDescending(x => x.OutreachFitScore),
+            "fit" => query.OrderByDescending(x => x.FitScore),
+            "name" => query.OrderBy(x => x.DisplayName),
+            "recent" => query.OrderByDescending(x => x.UpdatedAt),
+            _ => query.OrderBy(x => x.Rank == null).ThenBy(x => x.Rank).ThenByDescending(x => x.FitScore).ThenByDescending(x => x.UpdatedAt)
+        };
+        var items = await sorted.ThenBy(x => x.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
