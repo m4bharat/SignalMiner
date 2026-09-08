@@ -1,3 +1,4 @@
+import { hasUnresolvedVariables, runReviewedEmails, SendProgress } from './selected-email-run';
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -58,7 +59,12 @@ interface SharedEmailTemplateParts {
   layout: string;
 }
 
+interface Suppression { normalizedEmail: string; reason: string; createdAt: string; details?: string; }
+interface OutreachCapacity { dailySendLimit: number; delayBetweenMessagesSeconds: number; remainingCapacity: number; }
+interface ReviewedEmail { lead: Lead; preview: EmailPreview | null; form: FormData | null; warning: string; }
+
 interface Lead {
+  suppression?: Suppression;
   firstName?: string;
   lastName?: string;
   rank?: number;
@@ -170,6 +176,17 @@ export class AppComponent {
   private readonly authStorageKey = 'signalminer.dashboard.authenticated';
   private readonly dashboardUsername = 'admin@zextri.com';
   private readonly dashboardPassword = 'zextri';
+  protected readonly outreachPolicy = signal<OutreachCapacity | null>(null);
+  protected readonly reviewRows = signal<ReviewedEmail[]>([]);
+  protected readonly reviewOpen = signal(false);
+  protected readonly reviewConfirmed = signal(false);
+  protected readonly sendProgress = signal<SendProgress | null>(null);
+  protected readonly suppressionQuery = signal('');
+  protected readonly suppressionPage = signal(1);
+  protected readonly suppressions = signal<Suppression[]>([]);
+  protected readonly suppressionTotal = signal(0);
+  protected readonly suppressionDetails = signal('');
+  private sendStop: AbortController | null = null;
   private toastTimer: number | undefined;
   private sharedEmailTemplateParts: SharedEmailTemplateParts | null = null;
   private templateHtmlCache = new Map<string, string>();
@@ -286,6 +303,8 @@ export class AppComponent {
   }
 
   protected logout(): void {
+    this.stopSending();
+    this.reviewOpen.set(false);
     sessionStorage.removeItem(this.authStorageKey);
     this.isAuthenticated.set(false);
     this.leads.set([]);
@@ -296,6 +315,8 @@ export class AppComponent {
   }
 
   private initializeDashboard(): void {
+    this.loadSuppressions();
+    void this.loadOutreachPolicy();
     this.loadEmailSettings();
     this.loadEmailTemplates();
     this.search();
@@ -805,69 +826,86 @@ export class AppComponent {
     this.sendEmail();
   }
 
+  private async loadOutreachPolicy(): Promise<void> {
+    try { this.outreachPolicy.set(await firstValueFrom(this.http.get<OutreachCapacity>(`${this.apiBase}/outreach/policy`))); }
+    catch { this.outreachPolicy.set(null); this.message.set('Cannot verify sending limits. Sending selected is disabled.'); }
+  }
+
+  protected loadSuppressions(reset = true): void {
+    if (reset) this.suppressionPage.set(1);
+    this.http.get<{items: Suppression[]; total: number}>(`${this.apiBase}/outreach/suppressions`, {
+      params: { query: this.suppressionQuery(), page: this.suppressionPage(), pageSize: 10 }
+    }).subscribe({ next: result => { this.suppressions.set(result.items); this.suppressionTotal.set(result.total); },
+      error: () => this.message.set('Could not load the suppression list.') });
+  }
+
+  protected recordSuppression(reason: string): void {
+    const lead = this.selectedLead();
+    if (!lead?.publicEmail || this.emailSending()) return;
+    if (!window.confirm(`Permanently suppress ${lead.publicEmail} as ${reason}? All leads with this email will be blocked. An already submitted message may still complete.`)) return;
+    this.http.post<Suppression>(`${this.apiBase}/outreach/leads/${lead.id}/suppression`, { reason, details: this.suppressionDetails() }).subscribe({
+      next: record => {
+        const blocked = { ...lead, suppression: record, contactStatus: 'DoNotContact' as ContactStatus };
+        this.selectedLead.set(blocked);
+        this.leads.update(leads => leads.map(item => item.publicEmail?.trim().toLowerCase() === record.normalizedEmail ? { ...item, suppression: record, contactStatus: 'DoNotContact' as ContactStatus } : item));
+        this.selectedLeadIds.update(ids => new Set([...ids].filter(id => this.leads().some(item => item.id === id && this.canEmailLead(item)))));
+        this.suppressionDetails.set(''); this.loadSuppressions();
+      }, error: (error: HttpErrorResponse) => this.message.set(error.error?.message || 'Could not save suppression.')
+    });
+  }
+
   protected async sendSelectedEmails(): Promise<void> {
-    if (this.emailSending()) return;
-
-    const leads = this.selectedEmailLeads();
-    if (leads.length === 0) {
-      this.showToast('error', EmailStrings.ui.toasts.emailNotReadyTitle, EmailStrings.ui.toasts.selectBulkContactsBody);
-      return;
-    }
-
-    const previews: Array<{ lead: Lead; preview: EmailPreview }> = [];
-    for (const lead of leads) {
-      const preview = this.buildEmailPreview(false, true, lead);
-      if (!preview) {
-        return;
-      }
-
-      previews.push({ lead, preview });
-    }
-
-    const confirmed = window.confirm(buildSendEmailConfirmation({
-      leadSummary: `${previews.length} selected contacts`,
-      recipient: `${previews.length} separate emails: ${previews.map(item => item.preview.recipient).join(', ')}`,
-      sender: previews[0].preview.sender,
-      templateName: previews[0].preview.templateName,
-      templateVersion: previews[0].preview.templateVersion,
-      subject: previews[0].preview.subject,
-      bodyText: previews[0].preview.bodyText
-    }));
-    if (!confirmed) {
-      return;
-    }
-
+    if (this.emailSending() || this.reviewOpen()) return;
+    const selected = this.leads().filter(lead => this.selectedLeadIds().has(lead.id));
+    if (!selected.length) return;
     this.loading.set(true);
-    this.emailSending.set(true);
-
-    const failures: string[] = [];
-    for (const item of previews) {
-      try {
-        const updated = await firstValueFrom(this.postEmail(item.lead, item.preview));
-        if (this.selectedLead()?.id === updated.id) {
-          this.selectedLead.set(updated);
-        }
-      } catch (error) {
-        failures.push(`${item.lead.displayName}: ${this.getErrorMessage(error as HttpErrorResponse, EmailStrings.ui.toasts.emailFailedBody)}`);
+    await this.loadOutreachPolicy();
+    if (!this.outreachPolicy()) { this.loading.set(false); return; }
+    const rows: ReviewedEmail[] = [];
+    try {
+      for (const selectedLead of selected) {
+        const lead = await firstValueFrom(this.http.get<Lead>(`${this.apiBase}/leads/${selectedLead.id}`));
+        const extraRecipients = !!(this.emailCc().trim() || this.emailBcc().trim());
+        const preview = this.canEmailLead(lead) && !extraRecipients ? this.buildEmailPreview(false, false, lead) : null;
+        const form = preview ? this.emailForm(preview) : null;
+        form?.append('isSelectedSend', 'true');
+        rows.push({ lead, preview, form,
+          warning: extraRecipients ? 'Remove CC/BCC before selected sending; only reviewed To recipients are allowed.' : lead.suppression ? `Suppressed: ${lead.suppression.reason}` : lead.contactStatus === 'DoNotContact' ? 'Do not contact' : !preview ? 'Invalid email, missing personalization, or unresolved variables. Fix before sending.' : preview.warnings.join(' ') });
       }
-    }
+      this.reviewRows.set(rows); this.reviewConfirmed.set(false); this.reviewOpen.set(true);
+    } catch { this.message.set('Could not verify every selected recipient. No emails sent.'); }
+    finally { this.loading.set(false); }
+  }
 
-    this.loading.set(false);
-    this.emailSending.set(false);
+  protected canConfirmReview(): boolean {
+    const policy = this.outreachPolicy();
+    return !!policy && this.reviewConfirmed() && this.reviewRows().length > 0 &&
+      this.reviewRows().length <= policy.remainingCapacity && this.reviewRows().every(row => !!row.preview && !!row.form);
+  }
 
-    if (failures.length > 0) {
-      const message = `Sent ${previews.length - failures.length} of ${previews.length} selected emails. ${failures[0]}`;
-      this.message.set(message);
-      this.showToast('error', EmailStrings.ui.toasts.emailFailedTitle, message);
-    } else {
-      const message = `${EmailStrings.ui.messages.bulkEmailSubmittedPrefix} ${previews.length} contacts as separate emails.`;
-      this.message.set(message);
-      this.showToast('success', EmailStrings.ui.toasts.emailSentTitle, message);
-      this.selectedLeadIds.set(new Set<string>());
-      this.draftDirty.set(false);
-    }
+  protected stopSending(): void { this.sendStop?.abort(); }
 
-    this.search(false);
+  protected reviewedOpening(row: ReviewedEmail): string {
+    const text = row.preview?.bodyText || '';
+    const name = this.firstName(row.lead);
+    const greeting = `${EmailStrings.templates.shared.greeting} ${name}`;
+    const start = text.toLowerCase().indexOf(greeting.toLowerCase());
+    return text.slice(Math.max(0, start), Math.max(0, start) + 350);
+  }
+
+  protected async confirmReviewedEmails(): Promise<void> {
+    if (!this.canConfirmReview() || this.emailSending()) return;
+    const rows = this.reviewRows(); const policy = this.outreachPolicy()!;
+    this.reviewOpen.set(false); this.emailSending.set(true); this.loading.set(true);
+    this.sendStop = new AbortController();
+    try {
+      const result = await runReviewedEmails(rows, async item => {
+        const updated = await firstValueFrom(this.http.post<Lead>(`${this.apiBase}/leads/${item.lead.id}/email`, item.form!));
+        this.leads.update(leads => leads.map(lead => lead.id === updated.id ? updated : lead));
+        this.selectedLeadIds.update(ids => new Set([...ids].filter(id => id !== updated.id)));
+      }, item => item.preview!.recipient, policy.delayBetweenMessagesSeconds, this.sendStop.signal, state => this.sendProgress.set(state));
+      this.message.set(`Selected emails: ${result.sent} submitted, ${result.failed} failed/uncertain, ${result.skipped} suppressed/skipped, ${result.stopped} stopped. Check history before any manual retry.`);
+    } finally { this.emailSending.set(false); this.loading.set(false); this.sendStop = null; await this.loadOutreachPolicy(); }
   }
 
   private submitEmail(preview: EmailPreview): void {
@@ -904,6 +942,10 @@ export class AppComponent {
   }
 
   private postEmail(lead: Lead, preview: EmailPreview) {
+    return this.http.post<Lead>(`${this.apiBase}/leads/${lead.id}/email`, this.emailForm(preview));
+  }
+
+  private emailForm(preview: EmailPreview): FormData {
     const form = new FormData();
     form.append('toEmail', preview.recipient);
     form.append('subject', preview.subject);
@@ -921,7 +963,7 @@ export class AppComponent {
       form.append('attachments', file, file.name);
     }
 
-    return this.http.post<Lead>(`${this.apiBase}/leads/${lead.id}/email`, form);
+    return form;
   }
 
   protected dismissToast(): void {
@@ -1091,7 +1133,7 @@ export class AppComponent {
   }
 
   protected canEmailLead(lead: Lead): boolean {
-    return Boolean(lead.publicEmail) && lead.contactStatus !== 'DoNotContact';
+    return Boolean(lead.publicEmail) && !lead.suppression && lead.contactStatus !== 'DoNotContact';
   }
 
   protected canSendSelectedLead(): boolean {
@@ -1134,6 +1176,7 @@ export class AppComponent {
     }
 
     if (!isTest) {
+      if (!this.canEmailLead(lead)) return null;
       if (!leadEmail) {
         if (showFeedback) this.showToast('error', EmailStrings.ui.toasts.emailNotReadyTitle, EmailStrings.ui.toasts.missingLeadEmailBody);
         return null;
@@ -1155,7 +1198,7 @@ export class AppComponent {
       return null;
     }
 
-    if (unresolvedVariables.length > 0 || missingRequiredVariables.length > 0) {
+    if (hasUnresolvedVariables(subject + bodyHtml + bodyText) || unresolvedVariables.length > 0 || missingRequiredVariables.length > 0) {
       if (showFeedback) this.showToast('error', EmailStrings.ui.toasts.emailNotReadyTitle, EmailStrings.ui.toasts.requiredVariablesBody);
       return null;
     }
@@ -1166,7 +1209,7 @@ export class AppComponent {
       subject,
       bodyHtml,
       bodyText,
-      warnings: this.getDraftWarnings(lead),
+      warnings: this.getDraftWarnings(lead, requestedRecipient, bodyHtml),
       isTest,
       templateName: this.selectedEmailTemplateName() || EmailStrings.preview.customDraftName,
       templateCategory: this.selectedOrDefaultTemplate()?.category ?? '',
@@ -1234,7 +1277,7 @@ export class AppComponent {
     };
 
     return value.replace(/\{\{\s*([a-zA-Z0-9]+)\s*\}\}/g, (_, key: string) => {
-      const replacement = variables[key] ?? '';
+      const replacement = variables[key] ?? '{{' + key + '}}';
       return forHtml ? this.escapeHtml(replacement) : replacement;
     });
   }
@@ -1243,14 +1286,14 @@ export class AppComponent {
     return value.replace(/\{\{\s*([a-zA-Z0-9]+)\s*\}\}/g, (_, key: string) => variables[key] ?? '');
   }
 
-  private getDraftWarnings(lead: Lead | null): string[] {
+  private getDraftWarnings(lead: Lead | null, recipient = this.emailTo(), finalBodyHtml?: string): string[] {
     if (!lead) {
       return [EmailStrings.ui.warnings.noLead];
     }
 
     const warnings: string[] = [];
     const firstName = this.firstName(lead);
-    const bodyText = this.normalizeText(this.htmlToText(this.finalEmailBodyHtml(lead)));
+    const bodyText = this.normalizeText(this.htmlToText(finalBodyHtml ?? this.finalEmailBodyHtml(lead)));
     const subjectText = this.normalizeText(this.resolveVariables(this.emailSubject(), lead, false));
     const missingRequiredVariables = this.getMissingRequiredVariables(lead);
     const unresolvedVariables = this.findUnresolvedVariables(`${subjectText} ${bodyText}`);
@@ -1261,7 +1304,7 @@ export class AppComponent {
     for (const variable of missingRequiredVariables) {
       warnings.push(`${EmailStrings.ui.warnings.missingRequiredVariablePrefix} {{${variable}}}.`);
     }
-    if (this.emailTo().trim() && lead.publicEmail && this.emailTo().trim().toLowerCase() !== lead.publicEmail.trim().toLowerCase()) {
+    if (recipient.trim() && lead.publicEmail && recipient.trim().toLowerCase() !== lead.publicEmail.trim().toLowerCase()) {
       warnings.push(EmailStrings.ui.warnings.recipientMismatch);
     }
     if (unresolvedVariables.length > 0) {
@@ -1280,7 +1323,7 @@ export class AppComponent {
     const values: Record<string, string> = {
       firstName: this.firstName(lead),
       fullName: lead.displayName.trim(),
-      company: this.companyNameOrFallback(lead),
+      company: lead.company?.name?.trim() || '',
       senderName: ZEXTRI_EMAIL_CONFIG.senderName,
       senderTitle: ZEXTRI_EMAIL_CONFIG.senderTitle,
       websiteUrl: ZEXTRI_EMAIL_CONFIG.websiteUrl,
@@ -1328,7 +1371,7 @@ export class AppComponent {
   }
 
   private firstName(lead: Lead): string {
-    return lead.displayName.trim().split(/\s+/)[0] ?? '';
+    return lead.firstName?.trim() || lead.displayName.trim().split(/\s+/)[0] || '';
   }
 
   private companyNameOrFallback(lead: Lead): string {

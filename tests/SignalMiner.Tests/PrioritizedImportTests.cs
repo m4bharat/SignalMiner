@@ -33,7 +33,7 @@ public sealed class PrioritizedImportTests
             ("Source Data", [["First Name", "Last Name", "Professional Email"], ["Raw", "Duplicate", "alex@example.com"]]),
             ("Scoring Rules", [["Category", "Maximum"]]));
         var repository = new MemoryRepository();
-        var result = await new LeadImportService(repository).ImportAsync(file, "leads.xlsx", true, default);
+        var result = await new LeadImportService(repository, new TestSuppressions()).ImportAsync(file, "leads.xlsx", true, default);
 
         Assert.Empty(result.Issues);
         Assert.Equal(2, result.TotalRows);
@@ -69,7 +69,7 @@ public sealed class PrioritizedImportTests
         var existing = new Lead { DisplayName = "Existing contact" };
         var repository = new MemoryRepository();
         repository.Leads.Add(existing);
-        var importer = new LeadImportService(repository);
+        var importer = new LeadImportService(repository, new TestSuppressions());
         using var file = Workbook(("Verify Before Send", [Headers, Row(existing.Id)]));
         var preview = await importer.ImportAsync(file, "leads.xlsx", false, default);
         Assert.True(Assert.Single(preview.PreviewRows).IsDuplicate);
@@ -95,7 +95,7 @@ public sealed class PrioritizedImportTests
             """";
         using var file = new MemoryStream(Encoding.UTF8.GetBytes(csv));
         var repository = new MemoryRepository();
-        var importer = new LeadImportService(repository);
+        var importer = new LeadImportService(repository, new TestSuppressions());
         var preview = await importer.ImportAsync(file, "manual-contact.csv", false, default);
         Assert.Equal(1, preview.ValidRows);
         Assert.Empty(repository.Leads);
@@ -118,7 +118,7 @@ public sealed class PrioritizedImportTests
     {
         using var file = Workbook(("Verify Before Send", [Headers, Row(Guid.NewGuid()), Row(Guid.NewGuid())]));
         var repository = new MemoryRepository();
-        var result = await new LeadImportService(repository).ImportAsync(file, "leads.xlsx", true, default);
+        var result = await new LeadImportService(repository, new TestSuppressions()).ImportAsync(file, "leads.xlsx", true, default);
         Assert.Equal(1, result.ImportedRows);
         Assert.Equal(1, result.SkippedRows);
         Assert.Single(repository.Leads);
@@ -133,7 +133,7 @@ public sealed class PrioritizedImportTests
     {
         using var file = Workbook(("Verify Before Send", [Headers, Row(Guid.NewGuid(), score: score)]));
         var repository = new MemoryRepository();
-        var result = await new LeadImportService(repository).ImportAsync(file, "leads.xlsx", true, default);
+        var result = await new LeadImportService(repository, new TestSuppressions()).ImportAsync(file, "leads.xlsx", true, default);
         Assert.Contains(result.Issues, issue => issue.Field == "Outreach Fit /10");
         Assert.Empty(repository.Leads);
     }
@@ -147,7 +147,7 @@ public sealed class PrioritizedImportTests
         row[3] = status;
         using var file = Workbook(("Hold or Exclude", [Headers, row]));
         var repository = new MemoryRepository();
-        var result = await new LeadImportService(repository).ImportAsync(file, "leads.xlsx", true, default);
+        var result = await new LeadImportService(repository, new TestSuppressions()).ImportAsync(file, "leads.xlsx", true, default);
         var issue = Assert.Single(result.Issues);
         Assert.Equal("Outreach Status", issue.Field);
         Assert.Equal("Hold or Exclude", issue.SourceSheet);
@@ -161,7 +161,7 @@ public sealed class PrioritizedImportTests
     {
         using var file = Workbook(("Verify Before Send", [Headers, Row(Guid.NewGuid(), email)]));
         var repository = new MemoryRepository();
-        var result = await new LeadImportService(repository).ImportAsync(file, "leads.xlsx", true, default);
+        var result = await new LeadImportService(repository, new TestSuppressions()).ImportAsync(file, "leads.xlsx", true, default);
         Assert.Contains(result.Issues, issue => issue.Field == "Professional Email");
         Assert.Empty(repository.Leads);
     }
@@ -175,7 +175,7 @@ public sealed class PrioritizedImportTests
         second[13] = "https://www.linkedin.com/in/alex";
         using var file = Workbook(("Verify Before Send", [Headers, first, second]));
         var repository = new MemoryRepository();
-        var result = await new LeadImportService(repository).ImportAsync(file, "leads.xlsx", true, default);
+        var result = await new LeadImportService(repository, new TestSuppressions()).ImportAsync(file, "leads.xlsx", true, default);
         Assert.Equal(1, result.ImportedRows);
         Assert.Equal(1, result.SkippedRows);
         Assert.Equal("https://www.linkedin.com/in/alex", Assert.Single(repository.Leads).LinkedInUrl);
@@ -196,7 +196,7 @@ public sealed class PrioritizedImportTests
     {
         using var file = new MemoryStream(Encoding.UTF8.GetBytes(csv));
         var repository = new MemoryRepository();
-        await Assert.ThrowsAsync<InvalidOperationException>(() => new LeadImportService(repository).ImportAsync(file, "leads.csv", true, default));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new LeadImportService(repository, new TestSuppressions()).ImportAsync(file, "leads.csv", true, default));
         Assert.False(repository.Saved);
     }
 
@@ -205,7 +205,7 @@ public sealed class PrioritizedImportTests
     {
         using var file = new MemoryStream(Encoding.UTF8.GetBytes("not an xlsx"));
         var repository = new MemoryRepository();
-        await Assert.ThrowsAsync<InvalidDataException>(() => new LeadImportService(repository).ImportAsync(file, "bad.xlsx", true, default));
+        await Assert.ThrowsAsync<InvalidDataException>(() => new LeadImportService(repository, new TestSuppressions()).ImportAsync(file, "bad.xlsx", true, default));
         Assert.False(repository.Saved);
     }
 
@@ -216,7 +216,7 @@ public sealed class PrioritizedImportTests
         row[13] = "NULL";
         using var file = Workbook(("Hold or Exclude", [Headers, row, row]));
         var repository = new MemoryRepository();
-        var result = await new LeadImportService(repository).ImportAsync(file, "leads.xlsx", true, default);
+        var result = await new LeadImportService(repository, new TestSuppressions()).ImportAsync(file, "leads.xlsx", true, default);
         Assert.Empty(result.Issues);
         Assert.Equal(1, result.ImportedRows);
         Assert.Equal(1, result.SkippedRows);

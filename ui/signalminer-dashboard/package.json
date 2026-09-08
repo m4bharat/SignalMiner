@@ -5,7 +5,8 @@
   "scripts": {
     "start": "ng serve --host 127.0.0.1 --port 4200",
     "build": "ng build",
-    "check": "tsc --project tsconfig.app.json --noEmit"
+    "check": "tsc --project tsconfig.app.json --noEmit",
+    "test": "node --experimental-strip-types --test tests/*.test.mts"
   },
   "dependencies": {
     "@angular/common": "20.3.30",

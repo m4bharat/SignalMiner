@@ -8,7 +8,7 @@ using SignalMiner.Domain;
 
 namespace SignalMiner.Infrastructure;
 
-public sealed class LeadImportService(ILeadRepository repository) : ILeadImportService
+public sealed class LeadImportService(ILeadRepository repository, ISuppressionService suppression) : ILeadImportService
 {
     private const int PreviewLimit = 25;
 
@@ -54,18 +54,22 @@ public sealed class LeadImportService(ILeadRepository repository) : ILeadImportS
             candidates.Select(x => x.Lead.LinkedInUrl).OfType<string>(),
             cancellationToken);
         var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var suppressed = await suppression.FindAsync(candidates.Select(x => x.Lead.PublicEmail).OfType<string>(), cancellationToken);
         var leadsToImport = new List<Lead>();
         var previewRows = new List<LeadImportPreviewRow>();
 
         foreach (var candidate in candidates)
         {
             var keys = candidate.ImportKeys;
-            var duplicateReason = keys.FirstOrDefault(existingKeys.Contains) is { } existingKey
+            var suppressedAddress = candidate.Lead.PublicEmail is { } email && suppressed.ContainsKey(email.Trim().ToLowerInvariant());
+            var duplicateReason = suppressedAddress ? "Suppressed email: import skipped." : keys.FirstOrDefault(existingKeys.Contains) is { } existingKey
                 ? BuildDuplicateReason(existingKey)
                 : keys.FirstOrDefault(seenKeys.Contains) is { } batchKey
                     ? BuildDuplicateReason(batchKey, existing: false)
                     : null;
             var isDuplicate = duplicateReason is not null;
+            if (suppressedAddress)
+                issues.Add(new LeadImportIssue(candidate.RowNumber, "Professional Email", "Suppressed email: import skipped."));
 
             if (!isDuplicate)
             {

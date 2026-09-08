@@ -48,7 +48,8 @@ public sealed record SendManualEmailRequest(
     string? TemplateId = null,
     string? TemplateVersion = null,
     string? TemplateName = null,
-    string? TemplateCategory = null);
+    string? TemplateCategory = null,
+    bool IsSelectedSend = false);
 
 public sealed record EmailAttachment(string FileName, string ContentType, byte[] Content);
 
@@ -114,13 +115,15 @@ public sealed class DiscoverySourceUnavailableException(string message) : Except
 
 public sealed class WebsiteExtractionException(string message) : Exception(message);
 
-public sealed class ManualEmailException(string message, int statusCode = 400) : Exception(message)
+public sealed class ManualEmailException(string message, int statusCode = 400, int? remainingCapacity = null) : Exception(message)
 {
     public int StatusCode { get; } = statusCode;
+    public int? RemainingCapacity { get; } = remainingCapacity;
 }
 
 public interface ILeadRepository
 {
+    void AddOutreachEvent(Lead lead, OutreachEvent outreachEvent) => lead.OutreachEvents.Add(outreachEvent);
     Task<Lead?> GetAsync(Guid id, CancellationToken cancellationToken);
     Task<LeadSearchResult> SearchAsync(LeadSearchRequest request, CancellationToken cancellationToken);
     Task<IReadOnlySet<string>> FindExistingImportKeysAsync(IEnumerable<Guid> leadIds, IEnumerable<string> emails, IEnumerable<string> linkedInUrls, CancellationToken cancellationToken);

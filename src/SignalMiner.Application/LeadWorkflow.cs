@@ -69,7 +69,7 @@ public sealed class LeadWorkflow(
         lead.UpdatedAt = DateTimeOffset.UtcNow;
         if (!string.IsNullOrWhiteSpace(request.Note))
         {
-            lead.OutreachEvents.Add(new OutreachEvent
+            repository.AddOutreachEvent(lead, new OutreachEvent
             {
                 Type = OutreachEventType.StatusChanged,
                 Body = request.Note,
@@ -95,7 +95,7 @@ public sealed class LeadWorkflow(
             Body = request.Body,
             NewContactStatus = request.NewContactStatus
         };
-        lead.OutreachEvents.Add(evt);
+        repository.AddOutreachEvent(lead, evt);
         if (request.NewContactStatus is not null)
         {
             lead.ContactStatus = request.NewContactStatus.Value;

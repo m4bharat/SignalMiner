@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\SignalMiner.Application\SignalMiner.Application.csproj" />
+    <ProjectReference Include="..\..\src\SignalMiner.Api\SignalMiner.Api.csproj" />
     <ProjectReference Include="..\..\src\SignalMiner.Domain\SignalMiner.Domain.csproj" />
     <ProjectReference Include="..\..\src\SignalMiner.Infrastructure\SignalMiner.Infrastructure.csproj" />
   </ItemGroup>

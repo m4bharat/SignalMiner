@@ -11,8 +11,17 @@ namespace SignalMiner.Api.Controllers;
 public sealed class LeadsController(
     ILeadWorkflow workflow,
     ILeadRepository repository,
-    IManualEmailService manualEmail) : ControllerBase
+    IManualEmailService manualEmail,
+    ISuppressionService suppression) : ControllerBase
 {
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<LeadDto>> Get(Guid id, CancellationToken cancellationToken)
+    {
+        var lead = await repository.GetAsync(id, cancellationToken);
+        if (lead is null) return NotFound();
+        var records = await suppression.FindAsync(new[] { lead.PublicEmail ?? "" }, cancellationToken);
+        return Ok(LeadDto.From(lead) with { Suppression = records.GetValueOrDefault(lead.PublicEmail?.Trim().ToLowerInvariant() ?? "") });
+    }
     [HttpPost("discover")]
     public async Task<ActionResult<IReadOnlyList<LeadDto>>> Discover(
         DiscoverLeadsRequest request,
@@ -91,6 +100,7 @@ public sealed class LeadsController(
         [FromForm] string? cc,
         [FromForm] string? bcc,
         [FromForm] bool isTest,
+        [FromForm] bool isSelectedSend,
         [FromForm] string? templateId,
         [FromForm] string? templateVersion,
         [FromForm] string? templateName,
@@ -113,13 +123,14 @@ public sealed class LeadsController(
                 templateId,
                 templateVersion,
                 templateName,
-                templateCategory);
+                templateCategory,
+                isSelectedSend);
             var lead = await manualEmail.SendAsync(id, request, cancellationToken);
             return lead is null ? NotFound() : Ok(LeadDto.From(lead));
         }
         catch (ManualEmailException ex)
         {
-            return StatusCode(ex.StatusCode, new { message = ex.Message });
+            return StatusCode(ex.StatusCode, new { message = ex.Message, remainingCapacity = ex.RemainingCapacity });
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -215,6 +226,9 @@ public sealed class LeadsController(
                 priorityGroup, segment, country, company, minOutreachScore, maxOutreachScore, sortBy),
             cancellationToken);
 
-        return Ok(new LeadSearchDto(result.Items.Select(LeadDto.From).ToArray(), result.Total));
+        var suppressed = await suppression.FindAsync(result.Items.Select(x => x.PublicEmail).OfType<string>(), cancellationToken);
+        return Ok(new LeadSearchDto(result.Items.Select(lead => LeadDto.From(lead) with {
+            Suppression = lead.PublicEmail is { } email && suppressed.TryGetValue(email.Trim().ToLowerInvariant(), out var record) ? record : null
+        }).ToArray(), result.Total));
     }
 }

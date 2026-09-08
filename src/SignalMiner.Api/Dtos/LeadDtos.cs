@@ -25,6 +25,7 @@ public sealed record LeadDto(
     IReadOnlyList<LeadEmailLogDto> EmailLogs)
 {
     public string? FirstName { get; init; }
+    public EmailSuppression? Suppression { get; init; }
     public string? LastName { get; init; }
     public int? Rank { get; init; }
     public string? PriorityGroup { get; init; }

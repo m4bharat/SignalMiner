@@ -172,6 +172,14 @@ label {
   margin-bottom: 1rem;
 }
 
+.review-backdrop { position: fixed; inset: 0; background: #0008; z-index: 1000; display: grid; place-items: center; padding: 1rem; }
+.review-dialog { background: #fbfcf8; padding: 1.5rem; width: min(1200px, 96vw); max-height: 90vh; overflow: auto; border-radius: 8px; }
+.review-table-scroll { overflow: auto; margin: 1rem 0; }
+.review-dialog pre { white-space: pre-wrap; min-width: 240px; font: inherit; }
+.review-dialog td { vertical-align: top; min-width: 150px; overflow-wrap: anywhere; }
+.review-dialog input[type=checkbox] { width: auto; justify-self: start; }
+.send-progress, .suppression-actions { background: #f0f3ec; padding: 1rem; margin-bottom: 1rem; }
+
 .advanced-filters summary {
   cursor: pointer;
   font-weight: 600;

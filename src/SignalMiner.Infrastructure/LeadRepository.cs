@@ -6,6 +6,12 @@ namespace SignalMiner.Infrastructure;
 
 public sealed class LeadRepository(SignalMinerDbContext db) : ILeadRepository
 {
+    public void AddOutreachEvent(Lead lead, OutreachEvent outreachEvent)
+    {
+        outreachEvent.LeadId = lead.Id;
+        lead.OutreachEvents.Add(outreachEvent);
+        db.OutreachEvents.Add(outreachEvent);
+    }
     public Task<Lead?> GetAsync(Guid id, CancellationToken cancellationToken) =>
         db.Leads
             .Include(x => x.Company)

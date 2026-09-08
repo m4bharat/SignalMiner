@@ -6,6 +6,8 @@ namespace SignalMiner.Infrastructure;
 public sealed class SignalMinerDbContext(DbContextOptions<SignalMinerDbContext> options) : DbContext(options)
 {
     public DbSet<Lead> Leads => Set<Lead>();
+    public DbSet<EmailSuppression> EmailSuppressions => Set<EmailSuppression>();
+    public DbSet<EmailSubmission> EmailSubmissions => Set<EmailSubmission>();
     public DbSet<Company> Companies => Set<Company>();
     public DbSet<OutreachEvent> OutreachEvents => Set<OutreachEvent>();
     public DbSet<SourceProfile> SourceProfiles => Set<SourceProfile>();
@@ -13,6 +15,13 @@ public sealed class SignalMinerDbContext(DbContextOptions<SignalMinerDbContext> 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<EmailSuppression>(entity =>
+        {
+            entity.HasKey(x => x.NormalizedEmail);
+            entity.Property(x => x.NormalizedEmail).HasMaxLength(320);
+            entity.Property(x => x.Details).HasMaxLength(2000);
+        });
+        modelBuilder.Entity<EmailSubmission>().HasIndex(x => x.StartedAt);
         modelBuilder.Entity<Lead>(entity =>
         {
             entity.HasIndex(x => x.FitScore);

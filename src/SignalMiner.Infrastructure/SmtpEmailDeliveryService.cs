@@ -68,7 +68,8 @@ public sealed class SmtpEmailDeliveryService(IConfiguration configuration) : IEm
             await client.ConnectAsync(options.Host, options.Port, GetSocketOptions(options), cancellationToken);
             await client.AuthenticateAsync(options.Username, options.Password, cancellationToken);
             var providerResponse = await client.SendAsync(mail, cancellationToken);
-            await client.DisconnectAsync(true, cancellationToken);
+            // A disconnect failure after SMTP accepted DATA must not turn a submitted email into a failure.
+            try { await client.DisconnectAsync(true, CancellationToken.None); } catch { }
             return new EmailDeliveryResult(
                 EmailStrings.SubmittedStatus,
                 ExtractProviderMessageId(providerResponse) ?? mail.MessageId,

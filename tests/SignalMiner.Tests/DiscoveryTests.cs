@@ -413,7 +413,7 @@ public sealed class DiscoveryTests
         };
         var repository = new SingleLeadRepository(lead);
         var delivery = new RecordingEmailDeliveryService();
-        var service = new ManualEmailService(repository, delivery);
+        var service = new ManualEmailService(repository, delivery, new TestSafety());
 
         var updated = await service.SendAsync(
             lead.Id,
@@ -453,7 +453,7 @@ public sealed class DiscoveryTests
     public async Task ManualEmailService_RejectsLeadWithoutEmail()
     {
         var lead = new Lead { DisplayName = "LinkedIn Only" };
-        var service = new ManualEmailService(new SingleLeadRepository(lead), new RecordingEmailDeliveryService());
+        var service = new ManualEmailService(new SingleLeadRepository(lead), new RecordingEmailDeliveryService(), new TestSafety());
 
         var exception = await Assert.ThrowsAsync<ManualEmailException>(() =>
             service.SendAsync(lead.Id, new SendManualEmailRequest(null, "Hello", "Body", null, null, null, null, []), CancellationToken.None));
@@ -468,7 +468,7 @@ public sealed class DiscoveryTests
         var repository = new SingleLeadRepository(lead);
         var delivery = new RecordingEmailDeliveryService();
         var exception = await Assert.ThrowsAsync<ManualEmailException>(() =>
-            new ManualEmailService(repository, delivery).SendAsync(lead.Id,
+            new ManualEmailService(repository, delivery, new TestSafety()).SendAsync(lead.Id,
                 new SendManualEmailRequest(lead.PublicEmail, "Hello", "Body", null, null, null, null, []), default));
         Assert.Equal(EmailStrings.DoNotContact, exception.Message);
         Assert.Empty(delivery.Messages);
@@ -487,7 +487,7 @@ public sealed class DiscoveryTests
         };
         var repository = new SingleLeadRepository(lead);
         var delivery = new RecordingEmailDeliveryService();
-        var service = new ManualEmailService(repository, delivery);
+        var service = new ManualEmailService(repository, delivery, new TestSafety());
 
         var exception = await Assert.ThrowsAsync<ManualEmailException>(() =>
             service.SendAsync(
@@ -511,7 +511,7 @@ public sealed class DiscoveryTests
             ContactStatus = ContactStatus.NotContacted
         };
         var repository = new SingleLeadRepository(lead);
-        var service = new ManualEmailService(repository, new FailingEmailDeliveryService());
+        var service = new ManualEmailService(repository, new FailingEmailDeliveryService(), new TestSafety());
 
         var exception = await Assert.ThrowsAsync<ManualEmailException>(() =>
             service.SendAsync(
@@ -536,7 +536,7 @@ public sealed class DiscoveryTests
         };
         var repository = new SingleLeadRepository(lead);
         var delivery = new RecordingEmailDeliveryService();
-        var service = new ManualEmailService(repository, delivery);
+        var service = new ManualEmailService(repository, delivery, new TestSafety());
 
         await service.SendAsync(
             lead.Id,

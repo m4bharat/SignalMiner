@@ -5,7 +5,8 @@ namespace SignalMiner.Application;
 
 public sealed class ManualEmailService(
     ILeadRepository repository,
-    IEmailDeliveryService delivery) : IManualEmailService
+    IEmailDeliveryService delivery,
+    IOutreachSafety safety) : IManualEmailService
 {
     private const int MaxAttachmentCount = 5;
     private const int MaxTotalAttachmentBytes = 10 * 1024 * 1024;
@@ -58,6 +59,18 @@ public sealed class ManualEmailService(
         var bcc = ParseEmailList(request.Bcc, "BCC");
         var replyTo = ParseOptionalEmail(request.ReplyTo, "Reply-to");
         var bodyHtml = string.IsNullOrWhiteSpace(request.BodyHtml) ? null : request.BodyHtml.Trim();
+        if (System.Text.RegularExpressions.Regex.IsMatch(request.Subject + request.Body + bodyHtml, @"\{\{.*?\}\}", System.Text.RegularExpressions.RegexOptions.Singleline))
+            throw new ManualEmailException("Resolve all template variables before sending.");
+        if (request.IsSelectedSend)
+        {
+            var firstName = lead.FirstName?.Trim();
+            if (string.IsNullOrEmpty(firstName)) firstName = lead.DisplayName.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(firstName) || !request.Body.Contains(firstName, StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(request.TemplateId) || string.IsNullOrWhiteSpace(request.TemplateVersion))
+                throw new ManualEmailException("Selected emails require a personalized opening and a reviewed template/version.");
+            if (cc.Count > 0 || bcc.Count > 0)
+                throw new ManualEmailException("Selected sending permits only the individually reviewed To recipients. Remove CC/BCC.");
+        }
 
         if (request.Attachments.Count > MaxAttachmentCount)
         {
@@ -69,7 +82,12 @@ public sealed class ManualEmailService(
             throw new ManualEmailException(EmailStrings.AttachmentsTooLarge);
         }
 
-        var deliveryResult = await delivery.SendAsync(
+        await using var lease = request.IsTest ? null : await safety.BeginAsync(leadId,
+            new[] { toEmail }.Concat(cc).Concat(bcc).ToArray(), cancellationToken);
+        EmailDeliveryResult deliveryResult;
+        try
+        {
+        deliveryResult = await delivery.SendAsync(
             new EmailMessage(
                 toEmail,
                 request.IsTest ? EmailStrings.TestInboxName : lead.DisplayName,
@@ -77,24 +95,31 @@ public sealed class ManualEmailService(
                 bodyHtml ?? request.Body.Trim(),
                 bodyHtml is not null,
                 replyTo,
-                cc,
-                bcc,
+                request.IsTest ? [] : cc,
+                request.IsTest ? [] : bcc,
                 request.Attachments),
             cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            if (lease is not null) await lease.UncertainAsync(ex.Message);
+            throw;
+        }
 
         if (!request.IsTest)
         {
             lead.ContactStatus = ContactStatus.Contacted;
         }
         lead.UpdatedAt = DateTimeOffset.UtcNow;
-        lead.OutreachEvents.Add(new OutreachEvent
+        repository.AddOutreachEvent(lead, new OutreachEvent
         {
             Type = request.IsTest ? OutreachEventType.ManualEmailPrepared : OutreachEventType.ManualEmailSent,
             Body = BuildOutreachEventBody(request, toEmail, deliveryResult),
             NewContactStatus = request.IsTest ? null : ContactStatus.Contacted
         });
 
-        await repository.SaveChangesAsync(cancellationToken);
+        if (lease is not null) await lease.SubmittedAsync(deliveryResult);
+        await repository.SaveChangesAsync(CancellationToken.None);
         return lead;
     }
 

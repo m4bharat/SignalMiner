@@ -33,6 +33,16 @@
   </main>
 } @else {
 <main class="shell">
+  @if (sendProgress(); as progress) {
+    <section class="send-progress" aria-live="polite">
+      <p>Submitted: {{ progress.sent }} · Failed/uncertain: {{ progress.failed }} · Suppressed/skipped: {{ progress.skipped }} · Remaining: {{ progress.remaining }} · Stopped: {{ progress.stopped }}</p>
+      @if (emailSending()) {
+        <p>Current recipient: {{ progress.current }}</p>
+        <button type="button" (click)="stopSending()">Stop sending</button>
+        <p>Stopping prevents remaining messages from starting. An already submitted or in-flight SMTP message may still complete.</p>
+      }
+    </section>
+  }
   <section class="topbar">
     <div>
       <h1>SignalMiner</h1>
@@ -51,7 +61,45 @@
   </section>
 
   <section class="workspace" [class.detail-expanded]="detailExpanded()">
+    @if (reviewOpen()) {
+      <div class="review-backdrop">
+        <section class="review-dialog" role="dialog" aria-modal="true" aria-labelledby="review-title">
+          <h2 id="review-title">Review every selected email</h2>
+          @if (outreachPolicy(); as policy) {
+            <p>Daily limit: {{ policy.dailySendLimit }}. Remaining today (UTC): {{ policy.remainingCapacity }}. Delay: {{ policy.delayBetweenMessagesSeconds }} seconds between messages.</p>
+            @if (reviewRows().length > policy.remainingCapacity) { <p role="alert">Selection exceeds remaining capacity. Reduce the selection.</p> }
+          }
+          <p>Each row is a separate email. Expand the final body to inspect all personalized content.</p>
+          <div class="review-table-scroll">
+            <table><thead><tr><th>Lead / email</th><th>Greeting / opening</th><th>Final subject</th><th>Template</th><th>Warnings / final body</th></tr></thead>
+              <tbody>@for (row of reviewRows(); track row.lead.id) {
+                <tr><td>{{ row.lead.displayName }}<br>{{ row.lead.publicEmail }}</td>
+                  <td>{{ reviewedOpening(row) || 'Blocked' }}</td>
+                  <td>{{ row.preview?.subject || 'Blocked' }}</td>
+                  <td>{{ row.preview?.templateName }} v{{ row.preview?.templateVersion }}</td>
+                  <td>{{ row.warning || 'No warnings' }}
+                    @if (row.preview; as preview) { <details><summary>Final body</summary><pre>{{ preview.bodyText }}</pre></details> }
+                  </td></tr>
+              }</tbody>
+            </table>
+          </div>
+          <label><input type="checkbox" [ngModel]="reviewConfirmed()" (ngModelChange)="reviewConfirmed.set($event)">I reviewed every recipient and final message.</label>
+          <button type="button" (click)="confirmReviewedEmails()" [disabled]="!canConfirmReview() || emailSending()">Confirm and send separately</button>
+          <button type="button" class="secondary" (click)="reviewOpen.set(false)">Cancel</button>
+        </section>
+      </div>
+    }
     <aside class="filters">
+      <details>
+        <summary>Suppression list ({{ suppressionTotal() }})</summary>
+        <label>Search email, reason or details<input [ngModel]="suppressionQuery()" (ngModelChange)="suppressionQuery.set($event)" (keydown.enter)="loadSuppressions()"></label>
+        <button type="button" class="secondary" (click)="loadSuppressions()">Search suppressions</button>
+        @for (record of suppressions(); track record.normalizedEmail) {
+          <p>{{ record.normalizedEmail }}<br>{{ record.reason }} · {{ formatContactedAt(record.createdAt) }}<br>{{ record.details }}</p>
+        }
+        <button type="button" class="secondary" [disabled]="suppressionPage() <= 1" (click)="suppressionPage.set(suppressionPage() - 1); loadSuppressions(false)">Previous</button>
+        <button type="button" class="secondary" [disabled]="suppressionPage() * 10 >= suppressionTotal()" (click)="suppressionPage.set(suppressionPage() + 1); loadSuppressions(false)">Next</button>
+      </details>
       <label>
         Search
         <input [ngModel]="query()" (ngModelChange)="query.set($event)" (keydown.enter)="search()" placeholder="Name, role, email, notes, recommendation…">
@@ -289,6 +337,20 @@
 
     <aside class="detail">
       @if (selectedLead(); as lead) {
+        <details class="suppression-actions">
+          <summary>Delivery safety</summary>
+          @if (lead.suppression; as record) {
+            <p>Suppressed: {{ record.reason }} · {{ formatContactedAt(record.createdAt) }}</p><p>{{ record.details }}</p>
+          } @else {
+            <label>Details / source (optional)<input maxlength="2000" [ngModel]="suppressionDetails()" (ngModelChange)="suppressionDetails.set($event)"></label>
+            <div class="filter-actions">
+              <button type="button" class="secondary" (click)="recordSuppression('HardBounce')" [disabled]="!lead.publicEmail || emailSending()">Hard bounce</button>
+              <button type="button" class="secondary" (click)="recordSuppression('Complaint')" [disabled]="!lead.publicEmail || emailSending()">Complaint</button>
+              <button type="button" class="secondary" (click)="recordSuppression('Unsubscribed')" [disabled]="!lead.publicEmail || emailSending()">Unsubscribe</button>
+              <button type="button" class="secondary" (click)="recordSuppression('Manual')" [disabled]="!lead.publicEmail || emailSending()">Manual suppression</button>
+            </div>
+          }
+        </details>
         <header class="detail-header">
           <div>
             <h2>{{ lead.displayName }}</h2>

@@ -35,7 +35,7 @@ public static class ServiceCollectionExtensions
             .UseNpgsql(configuration.GetSignalMinerConnectionString()).Options;
         await using var db = new SignalMinerDbContext(options);
         // Create the application tables before Hangfire creates its own schema.
-        await db.Database.EnsureCreatedAsync(cancellationToken);
+        await db.Database.MigrateAsync(cancellationToken);
     }
 
     public static IServiceCollection AddSignalMinerCore(this IServiceCollection services, IConfiguration configuration)
@@ -44,6 +44,14 @@ public static class ServiceCollectionExtensions
 
         services.AddDbContext<SignalMinerDbContext>(options => options.UseNpgsql(connectionString));
         services.AddScoped<ILeadRepository, LeadRepository>();
+        var outreach = configuration.GetSection("Email:Outreach");
+        int ReadPositive(string key, int fallback) => outreach[key] is null ? fallback :
+            int.TryParse(outreach[key], out var value) ? value : throw new InvalidOperationException($"Invalid Email:Outreach:{key}.");
+        var policy = new OutreachPolicy(ReadPositive("DailySendLimit", 50), ReadPositive("DelayBetweenMessagesSeconds", 10));
+        policy.Validate();
+        services.AddSingleton(policy);
+        services.AddScoped<IOutreachSafety, OutreachSafetyService>();
+        services.AddScoped<ISuppressionService, SuppressionService>();
         services.AddScoped<ILeadScoringService, LeadScoringService>();
         services.AddScoped<ILeadImportService, LeadImportService>();
         services.AddScoped<ILeadWorkflow, LeadWorkflow>();

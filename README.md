@@ -85,7 +85,7 @@ The dashboard expects the API at `http://localhost:5000`. Docker is not required
 
 ## Manual Email Sending
 
-SignalMiner can send one manually reviewed email at a time from the lead detail panel. It does not send bulk email or automated campaigns.
+SignalMiner sends separate, manually reviewed emails from lead detail or **Send selected**. Selected sending requires reviewing every recipient's final subject, opening, body, and template version before confirmation. There is no campaign scheduler or unrestricted bulk-send endpoint.
 
 Configure SMTP through `Email:Smtp` settings or environment variables before using **Send email**:
 
@@ -105,7 +105,9 @@ Titan may require third-party email access to be enabled. If two-factor authenti
 
 ## Fresh database and workbook import
 
-Create a new, empty PostgreSQL database and configure the same `ConnectionStrings:SignalMiner` value for the API and worker (or set `ConnectionStrings__SignalMiner` for both). Start the API, then the worker. Startup creates the current application tables before initializing Hangfire. The project uses `EnsureCreated`; it does not migrate old databases or retain old table layouts.
+Configure the same `ConnectionStrings:SignalMiner` for the API and worker (or `ConnectionStrings__SignalMiner`). Stop older API/worker instances before upgrading, back up the database, then start the updated API followed by the worker. Startup now runs EF Core migrations before Hangfire. `20260906211047_OutreachSafety` adopts the current imported-lead schema without recreating existing tables, preserves leads/events, creates suppression/submission tables, and seeds submission history from existing non-test email events. It also supports an empty database. Incompatible older schemas fail rather than being wiped. Rollbacks that would discard suppression/history are deliberately blocked; use a reviewed forward migration.
+
+For a separately managed deployment, set `ConnectionStrings__SignalMiner` securely and run `dotnet ef database update --project src/SignalMiner.Infrastructure --startup-project src/SignalMiner.Infrastructure` before starting services. Do not use `EnsureCreated` on an existing database.
 
 Upload `Zextri_Cleaned_Prioritized_Leads.xlsx` through **Import contacts** and preview before importing. The importer combines Ready 9plus, Verify Before Send, and Hold or Exclude using their `Outreach Fit /10` headers. Summary, Scoring Rules, and the repeated raw Source Data sheet are excluded. CSV/manual entry uses the same column names; historical header aliases and automatic score rescaling have been removed.
 
@@ -117,9 +119,23 @@ The dashboard displays priority, rank and outreach fit, with full assessment det
 
 Imports validate mailbox syntax, contact statuses and score precision, and report the source worksheet on row errors. Equivalent LinkedIn URLs, including regional hosts, are normalized for duplicate checks. The app's DoNotContact status blocks actual email delivery; workbook recommendations remain informational text.
 
+## Outreach safety
+
+`Email:Outreach:DailySendLimit` defaults to **50** (valid 1–10000), and `Email:Outreach:DelayBetweenMessagesSeconds` defaults to **10** (valid 1–3600). Environment equivalents are `Email__Outreach__DailySendLimit` and `Email__Outreach__DelayBetweenMessagesSeconds`. Invalid values fail startup. The UI obtains these values and remaining UTC-day capacity from `GET /api/outreach/policy` and fails closed if unavailable.
+
+The backend serializes send admission with a PostgreSQL advisory lock, persists a reservation before SMTP, checks all To/CC/BCC addresses against suppression and DoNotContact, enforces pacing, and returns HTTP 429 with `remainingCapacity: 0` when exhausted. Tests go only to the configured test inbox with CC/BCC removed and do not consume the limit. Pending/uncertain submissions conservatively consume capacity because SMTP acceptance cannot always be determined after a disconnect; do not automatically retry them. Submitted records and outreach history survive browser cancellation. SMTP submission is not proof of delivery.
+
+Under **Delivery safety**, record a hard bounce, complaint, unsubscribe, or manual suppression after confirmation. This permanently blocks the normalized address, marks matching leads DoNotContact, and records history. The original reason/date are retained on repeated submissions. Imports skip suppressed addresses with an explicit issue. Use the searchable **Suppression list** to view records; there is no UI deletion. APIs: `POST /api/outreach/leads/{id}/suppression` with `reason` and optional `details`, and `GET /api/outreach/suppressions?query=...&page=1&pageSize=25`.
+
+Selected sending uses frozen, individualized reviewed requests, without CC/BCC. **Stop sending** interrupts the delay and prevents the next request; an in-flight SMTP message may still complete. The final summary separates submitted, failed/uncertain, suppressed/skipped, and stopped. Network/provider/limit failures stop the remaining run, and no address is automatically retried. Refreshing or closing the page does not resume a run. Existing templates, discovery, imports, and individual sending remain manual workflows.
+
+Titan bounce/complaint/unsubscribe detection is **manual**. This change adds no IMAP polling, mailbox access, provider webhooks, automatic parsing, or campaigns. The app remains intended for a trusted local environment; its existing frontend sign-in is not server authentication.
+
+Run `dotnet test SignalMiner.sln`. For the PostgreSQL safety integration test, set `SIGNALMINER_TEST_DB` to a test connection with permission to create/drop schemas; it uses only a random `safety_test_*` schema and a fake mail sender. Without this variable, that integration test is explicitly skipped. From `ui/signalminer-dashboard`, run `npm run check`, `npm test` (Node 24), and `npm run build`; finish with `git diff --check`.
+
 ## Validation before pushing
 
-Run `dotnet test SignalMiner.sln`, then run `npm run check`, `npm run build` and `npm audit` from `ui/signalminer-dashboard`. Check .NET dependencies with `dotnet list SignalMiner.sln package --vulnerable --include-transitive`. The GitHub validation workflow runs builds, tests and dependency audits on pushes and pull requests. The dashboard uses Angular's application builder; the unused webpack build chain has been removed.
+Run `dotnet test SignalMiner.sln`, then run `npm run check`, `npm test`, `npm run build` and `npm audit` from `ui/signalminer-dashboard`. Check .NET dependencies with `dotnet list SignalMiner.sln package --vulnerable --include-transitive`. The GitHub validation workflow runs builds, tests and dependency audits on pushes and pull requests. The dashboard uses Angular's application builder; the unused webpack build chain has been removed.
 
 ## Scoring signals
 

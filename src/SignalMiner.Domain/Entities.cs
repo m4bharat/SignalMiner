@@ -1,5 +1,27 @@
 namespace SignalMiner.Domain;
 
+public enum SuppressionReason { HardBounce, Complaint, Unsubscribed, Manual }
+public sealed class EmailSuppression
+{
+    public string NormalizedEmail { get; set; } = string.Empty;
+    public SuppressionReason Reason { get; set; }
+    public string? Details { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public Guid? RelatedLeadId { get; set; }
+}
+
+public enum EmailSubmissionStatus { Pending, Submitted, Uncertain }
+public sealed class EmailSubmission
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid LeadId { get; set; }
+    public string Recipients { get; set; } = string.Empty;
+    public DateTimeOffset StartedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? SubmittedAt { get; set; }
+    public EmailSubmissionStatus Status { get; set; }
+    public string? Details { get; set; }
+}
+
 public enum LeadStatus
 {
     New,
